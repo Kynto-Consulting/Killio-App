@@ -16,6 +16,9 @@ fn main() {
             "open_account",
             "list_apps",
             "open_app",
+            "save_screenshot",
+            "set_chrome",
+            "chrome_action",
         ]),
     ))
     .expect("failed to run tauri-build");

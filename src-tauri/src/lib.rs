@@ -2,10 +2,17 @@ mod apps;
 mod commands;
 mod config;
 mod i18n;
+#[cfg(desktop)]
+mod icon;
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl};
 
 const INIT_SCRIPT: &str = include_str!("init.js");
+
+/// Label of the webview that shows the launcher and then the tenant's frontend.
+pub const CONTENT: &str = "content";
+/// Label of the app's own title bar (desktop only).
+pub const TITLEBAR: &str = "titlebar";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,78 +27,88 @@ pub fn run() {
             commands::remove_tenant,
             commands::switch_tenant,
             commands::capture_screenshot,
+            commands::save_screenshot,
             commands::open_external,
             commands::report_accounts,
             commands::list_accounts,
             commands::open_account,
             commands::list_apps,
             commands::open_app,
+            commands::set_chrome,
+            commands::chrome_action,
         ])
         .setup(|app| {
             let store = app.state::<config::Store>();
             store.load(app.handle());
-
-            let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                // The system language goes first so the launcher and the native messages agree.
-                .initialization_script(&format!("window.__KILLIO_LANG__={:?};{}", i18n::language(), INIT_SCRIPT));
-            #[cfg(desktop)]
-            let builder = builder.title("Killio").inner_size(1280.0, 800.0).min_inner_size(380.0, 560.0);
-            let window = builder.build()?;
+            // The system language goes first so the launcher and the native messages agree.
+            let init = format!("window.__KILLIO_LANG__={:?};{}", i18n::language(), INIT_SCRIPT);
 
             #[cfg(desktop)]
-            desktop_menu::install(app.handle(), &window)?;
+            desktop::build(app, &init)?;
+
+            // A phone has no window chrome to replace: one full-screen webview.
+            #[cfg(mobile)]
+            tauri::WebviewWindowBuilder::new(app, CONTENT, WebviewUrl::App("index.html".into()))
+                .initialization_script(&init)
+                .build()?;
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running Killio App");
 }
 
+/// The desktop window: no system frame and no menu bar. A slim title bar of the app's own sits on top
+/// and the page gets everything below it, as two separate webviews. The page therefore keeps its real
+/// viewport and never has to make room for the app's chrome, whatever frontend version it is.
 #[cfg(desktop)]
-mod desktop_menu {
-    use tauri::{
-        menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-        AppHandle, Manager, WebviewWindow,
-    };
+mod desktop {
+    use tauri::{webview::WebviewBuilder, window::WindowBuilder, App, LogicalPosition, LogicalSize, Window, WindowEvent};
 
-    use crate::commands;
-    use crate::i18n::tr;
+    use super::{WebviewUrl, CONTENT, TITLEBAR};
 
-    pub fn install(app: &AppHandle, window: &WebviewWindow) -> tauri::Result<()> {
-        let switch = MenuItemBuilder::with_id("switch_tenant", tr("Cambiar de servidor…", "Switch server…"))
-            .accelerator("CmdOrCtrl+Shift+T")
-            .build(app)?;
-        let reload = MenuItemBuilder::with_id("reload", tr("Recargar", "Reload")).accelerator("CmdOrCtrl+R").build(app)?;
-        let shot = MenuItemBuilder::with_id("screenshot", tr("Guardar captura de pantalla", "Save screenshot"))
-            .accelerator("CmdOrCtrl+Shift+S")
-            .build(app)?;
-        let killio = SubmenuBuilder::new(app, "Killio")
-            .item(&switch)
-            .item(&reload)
-            .separator()
-            .item(&shot)
-            .separator()
-            .quit()
-            .build()?;
-        let edit = SubmenuBuilder::new(app, tr("Editar", "Edit")).undo().redo().separator().cut().copy().paste().select_all().build()?;
-        let menu = MenuBuilder::new(app).item(&killio).item(&edit).build()?;
-        window.set_menu(menu)?;
+    /// Height of the title bar, in logical pixels.
+    const BAR: f64 = 34.0;
 
-        app.on_menu_event(|app, event| {
-            let Some(window) = app.get_webview_window("main") else { return };
-            match event.id().as_ref() {
-                "switch_tenant" => {
-                    let _ = commands::go_to_launcher(&window, "switch");
-                }
-                "reload" => {
-                    let _ = window.eval("window.location.reload()");
-                }
-                "screenshot" => {
-                    let app = app.clone();
-                    std::thread::spawn(move || commands::save_screenshot_to_pictures(&app));
-                }
-                _ => {}
+    fn layout(window: &Window) {
+        let Ok(scale) = window.scale_factor() else { return };
+        let Ok(size) = window.inner_size() else { return };
+        let size = size.to_logical::<f64>(scale);
+        for webview in window.webviews() {
+            let (y, height) = if webview.label() == TITLEBAR { (0.0, BAR) } else { (BAR, (size.height - BAR).max(0.0)) };
+            let _ = webview.set_position(LogicalPosition::new(0.0, y));
+            let _ = webview.set_size(LogicalSize::new(size.width, height));
+        }
+    }
+
+    pub fn build(app: &mut App, init: &str) -> tauri::Result<()> {
+        let builder = WindowBuilder::new(app, "main").title("Killio").inner_size(1280.0, 800.0).min_inner_size(380.0, 560.0);
+        // macOS keeps its own window buttons, drawn over our title bar; the other systems get ours.
+        #[cfg(target_os = "macos")]
+        let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
+        #[cfg(not(target_os = "macos"))]
+        let builder = builder.decorations(false);
+        let window = builder.build()?;
+
+        let size = window.inner_size()?.to_logical::<f64>(window.scale_factor()?);
+        window.add_child(
+            WebviewBuilder::new(TITLEBAR, WebviewUrl::App("titlebar.html".into()))
+                .initialization_script(&format!("window.__KILLIO_LANG__={:?};", crate::i18n::language())),
+            LogicalPosition::new(0.0, 0.0),
+            LogicalSize::new(size.width, BAR),
+        )?;
+        window.add_child(
+            WebviewBuilder::new(CONTENT, WebviewUrl::App("index.html".into())).initialization_script(init),
+            LogicalPosition::new(0.0, BAR),
+            LogicalSize::new(size.width, (size.height - BAR).max(0.0)),
+        )?;
+
+        let resized = window.clone();
+        window.on_window_event(move |event| {
+            if matches!(event, WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }) {
+                layout(&resized);
             }
         });
+        layout(&window);
         Ok(())
     }
 }

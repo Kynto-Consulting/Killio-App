@@ -12,7 +12,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# "unstable": several webviews in one window (the app's title bar above the page).
+tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -29,4 +30,5 @@ panic = "abort"
 strip = true
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "ico", "jpeg", "webp"] }
 xcap = "0.9.10"

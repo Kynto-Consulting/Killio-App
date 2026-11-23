@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::i18n::tr;
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, Webview};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
@@ -21,7 +21,7 @@ fn is_launcher_url(url: &Url) -> bool {
     url.scheme() == "tauri" || url.host_str() == Some("tauri.localhost")
 }
 
-fn caller(window: &WebviewWindow, store: &Store) -> Caller {
+fn caller(window: &Webview, store: &Store) -> Caller {
     let Ok(url) = window.url() else { return Caller::Other };
     if is_launcher_url(&url) {
         return Caller::Launcher;
@@ -33,11 +33,11 @@ fn caller(window: &WebviewWindow, store: &Store) -> Caller {
     }
 }
 
-fn require_launcher(window: &WebviewWindow, store: &Store) -> Result<(), String> {
+fn require_launcher(window: &Webview, store: &Store) -> Result<(), String> {
     if caller(window, store) == Caller::Launcher { Ok(()) } else { Err(tr("Solo disponible desde el selector de servidor.", "Only available from the server picker.").into()) }
 }
 
-fn require_trusted(window: &WebviewWindow, store: &Store) -> Result<(), String> {
+fn require_trusted(window: &Webview, store: &Store) -> Result<(), String> {
     if caller(window, store) == Caller::Other { Err(tr("Esta página no puede usar funciones nativas.", "This page cannot use native features.").into()) } else { Ok(()) }
 }
 
@@ -50,7 +50,7 @@ pub struct AppInfo {
 }
 
 #[tauri::command]
-pub fn app_info(app: AppHandle, window: WebviewWindow, store: State<Store>) -> Result<AppInfo, String> {
+pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<AppInfo, String> {
     require_trusted(&window, &store)?;
     let mut features = vec!["switchTenant", "openExternal", "accounts"];
     if cfg!(desktop) {
@@ -66,7 +66,7 @@ pub fn app_info(app: AppHandle, window: WebviewWindow, store: State<Store>) -> R
 }
 
 #[tauri::command]
-pub fn app_state(window: WebviewWindow, store: State<Store>) -> Result<Config, String> {
+pub fn app_state(window: Webview, store: State<Store>) -> Result<Config, String> {
     require_launcher(&window, &store)?;
     // The launcher's address differs per platform (tauri://localhost, http://tauri.localhost…):
     // remember the real one the first time the launcher talks to us, to come back to it later.
@@ -87,7 +87,7 @@ fn same_site_ignoring_www(a: &Url, b: &Url) -> bool {
 /// The address the tenant really lives at (a site may redirect, e.g. to `www.`), or `None` when it
 /// does not answer. Any HTTP status counts as an answer: the server is there.
 #[tauri::command]
-pub async fn probe_tenant(window: WebviewWindow, store: State<'_, Store>, url: String) -> Result<Option<String>, String> {
+pub async fn probe_tenant(window: Webview, store: State<'_, Store>, url: String) -> Result<Option<String>, String> {
     require_launcher(&window, &store)?;
     let target = normalize_tenant_url(&url)?;
     let resolved = tauri::async_runtime::spawn_blocking(move || {
@@ -114,7 +114,7 @@ pub async fn probe_tenant(window: WebviewWindow, store: State<'_, Store>, url: S
 /// `replaces` is the address the user picked when the tenant turned out to live at another one.
 #[tauri::command]
 pub fn open_tenant(
-    window: WebviewWindow,
+    window: Webview,
     store: State<Store>,
     url: String,
     name: Option<String>,
@@ -155,7 +155,7 @@ pub fn open_tenant(
 }
 
 #[tauri::command]
-pub fn remove_tenant(window: WebviewWindow, store: State<Store>, url: String) -> Result<Config, String> {
+pub fn remove_tenant(window: Webview, store: State<Store>, url: String) -> Result<Config, String> {
     require_launcher(&window, &store)?;
     {
         let mut config = store.config.lock().unwrap();
@@ -170,7 +170,7 @@ pub fn remove_tenant(window: WebviewWindow, store: State<Store>, url: String) ->
 }
 
 /// Back to the launcher. `reason` tells it why ("switch": do not auto-open the last tenant).
-pub fn go_to_launcher(window: &WebviewWindow, reason: &str) -> Result<(), String> {
+pub fn go_to_launcher(window: &Webview, reason: &str) -> Result<(), String> {
     let store = window.state::<Store>();
     let mut url = store.launcher_url.lock().unwrap().clone().ok_or(tr("Selector no disponible.", "The server picker is not available."))?;
     url.set_fragment(Some(reason));
@@ -178,12 +178,12 @@ pub fn go_to_launcher(window: &WebviewWindow, reason: &str) -> Result<(), String
 }
 
 #[tauri::command]
-pub fn switch_tenant(window: WebviewWindow, store: State<Store>) -> Result<(), String> {
+pub fn switch_tenant(window: Webview, store: State<Store>) -> Result<(), String> {
     require_trusted(&window, &store)?;
     go_to_launcher(&window, "switch")
 }
 
-fn require_tenant(window: &WebviewWindow, store: &Store) -> Result<String, String> {
+fn require_tenant(window: &Webview, store: &Store) -> Result<String, String> {
     if caller(window, store) != Caller::Tenant {
         return Err(tr("Solo disponible desde el servidor conectado.", "Only available from the connected server.").into());
     }
@@ -192,7 +192,7 @@ fn require_tenant(window: &WebviewWindow, store: &Store) -> Result<String, Strin
 
 /// The tenant's page tells the app which accounts are signed in on it. Replaces that tenant's list.
 #[tauri::command]
-pub fn report_accounts(window: WebviewWindow, store: State<Store>, accounts: Vec<Account>) -> Result<(), String> {
+pub fn report_accounts(window: Webview, store: State<Store>, accounts: Vec<Account>) -> Result<(), String> {
     let tenant = require_tenant(&window, &store)?;
     let cleaned = sanitize_accounts(&tenant, accounts);
     {
@@ -220,7 +220,7 @@ pub struct ListedAccount {
 
 /// Every account signed in on any server, for the account switcher.
 #[tauri::command]
-pub fn list_accounts(window: WebviewWindow, store: State<Store>) -> Result<Vec<ListedAccount>, String> {
+pub fn list_accounts(window: Webview, store: State<Store>) -> Result<Vec<ListedAccount>, String> {
     require_trusted(&window, &store)?;
     let config = store.snapshot();
     Ok(config
@@ -237,7 +237,7 @@ pub fn list_accounts(window: WebviewWindow, store: State<Store>) -> Result<Vec<L
 /// Go to another server already on the list and ask its page to switch to one of its accounts.
 /// The account id travels in the URL fragment, which is not sent to the server.
 #[tauri::command]
-pub fn open_account(window: WebviewWindow, store: State<Store>, tenant: String, account_id: String) -> Result<(), String> {
+pub fn open_account(window: Webview, store: State<Store>, tenant: String, account_id: String) -> Result<(), String> {
     require_trusted(&window, &store)?;
     let target = {
         let mut config = store.config.lock().unwrap();
@@ -273,7 +273,7 @@ fn allowed_scheme(scheme: &str) -> bool {
 
 /// Apps installed on this computer, for the agent's app tools. Desktop only.
 #[tauri::command]
-pub async fn list_apps(window: WebviewWindow, store: State<'_, Store>) -> Result<Vec<crate::apps::InstalledApp>, String> {
+pub async fn list_apps(window: Webview, store: State<'_, Store>) -> Result<Vec<crate::apps::InstalledApp>, String> {
     require_trusted(&window, &store)?;
     #[cfg(desktop)]
     {
@@ -287,7 +287,7 @@ pub async fn list_apps(window: WebviewWindow, store: State<'_, Store>) -> Result
 
 /// Opens one of the apps `list_apps` returned. Anything else is refused.
 #[tauri::command]
-pub fn open_app(app: AppHandle, window: WebviewWindow, store: State<Store>, package: String) -> Result<(), String> {
+pub fn open_app(app: AppHandle, window: Webview, store: State<Store>, package: String) -> Result<(), String> {
     require_trusted(&window, &store)?;
     #[cfg(desktop)]
     {
@@ -308,7 +308,7 @@ pub fn open_app(app: AppHandle, window: WebviewWindow, store: State<Store>, pack
 }
 
 #[tauri::command]
-pub fn open_external(app: AppHandle, window: WebviewWindow, store: State<Store>, url: String) -> Result<(), String> {
+pub fn open_external(app: AppHandle, window: Webview, store: State<Store>, url: String) -> Result<(), String> {
     require_trusted(&window, &store)?;
     let parsed = Url::parse(&url).map_err(|_| tr("URL no válida.", "The URL is not valid.").to_string())?;
     if !allowed_scheme(parsed.scheme()) {
@@ -346,7 +346,7 @@ fn capture_primary_png() -> Result<(Vec<u8>, u32, u32), String> {
 
 /// Screenshot of the primary screen, for the page to attach (agent tool, chat, cards…).
 #[tauri::command]
-pub async fn capture_screenshot(window: WebviewWindow, store: State<'_, Store>) -> Result<Screenshot, String> {
+pub async fn capture_screenshot(window: Webview, store: State<'_, Store>) -> Result<Screenshot, String> {
     require_trusted(&window, &store)?;
     #[cfg(desktop)]
     {
@@ -362,7 +362,7 @@ pub async fn capture_screenshot(window: WebviewWindow, store: State<'_, Store>) 
     }
 }
 
-/// Menu action: save a screenshot under Pictures/Killio and tell the page where it went.
+/// Saves a screenshot under Pictures/Killio and tell the page where it went.
 #[cfg(desktop)]
 pub fn save_screenshot_to_pictures(app: &AppHandle) {
     use tauri::Emitter;
@@ -382,4 +382,125 @@ pub fn save_screenshot_to_pictures(app: &AppHandle) {
         Ok(path) => app.emit("killio://screenshot-saved", path),
         Err(error) => app.emit("killio://screenshot-failed", error),
     };
+}
+
+/// Keyboard shortcut in the page: save a screenshot to Pictures/Killio.
+#[tauri::command]
+pub fn save_screenshot(app: AppHandle, window: Webview, store: State<Store>) -> Result<(), String> {
+    require_trusted(&window, &store)?;
+    #[cfg(desktop)]
+    std::thread::spawn(move || save_screenshot_to_pictures(&app));
+    #[cfg(not(desktop))]
+    let _ = app;
+    Ok(())
+}
+
+// ── The app's own title bar (desktop) ───────────────────────────────────────
+
+/// What the page below reports about itself so the title bar matches it.
+#[derive(serde::Deserialize, Serialize, Default, Clone, PartialEq)]
+pub struct Chrome {
+    /// Background colour of the page, as CSS `rgb()` or `#hex`.
+    color: Option<String>,
+    name: Option<String>,
+    /// Address of the server's icon.
+    icon: Option<String>,
+}
+
+fn clean_color(value: &str) -> Option<String> {
+    let v = value.trim();
+    let ok = v.len() <= 40
+        && (v.starts_with('#') || v.starts_with("rgb(") || v.starts_with("rgba("))
+        && v.chars().all(|c| c.is_ascii_hexdigit() || "#(), .%rgba".contains(c));
+    ok.then(|| v.to_string())
+}
+
+fn clean_icon(value: &str) -> Option<String> {
+    let url = Url::parse(value.trim()).ok()?;
+    let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1"));
+    ((url.scheme() == "https" || (url.scheme() == "http" && local)) && value.len() <= 600).then(|| url.to_string())
+}
+
+/// The launcher or the server's page describes itself; the title bar (and the window's icon) follow.
+/// Any other page (a sign-in provider, say) is refused, so the bar keeps showing the server it belongs to.
+#[tauri::command]
+pub fn set_chrome(app: AppHandle, window: Webview, store: State<Store>, chrome: Chrome) -> Result<(), String> {
+    require_trusted(&window, &store)?;
+    let chrome = Chrome {
+        color: chrome.color.as_deref().and_then(clean_color),
+        name: chrome.name.map(|n| n.trim().chars().filter(|c| !c.is_control()).take(60).collect::<String>()).filter(|n| !n.is_empty()),
+        icon: chrome.icon.as_deref().and_then(clean_icon),
+    };
+    #[cfg(desktop)]
+    {
+        if let Some(bar) = app.get_webview(crate::TITLEBAR) {
+            let json = serde_json::to_string(&chrome).map_err(|e| e.to_string())?;
+            let _ = bar.eval(&format!("window.__setChrome && window.__setChrome({json})"));
+        }
+        crate::icon::follow(&app, chrome.icon);
+    }
+    #[cfg(not(desktop))]
+    let _ = (app, chrome);
+    Ok(())
+}
+
+/// Buttons of the title bar. Only the title bar itself may call this.
+#[tauri::command]
+pub fn chrome_action(app: AppHandle, window: Webview, store: State<Store>, action: String) -> Result<(), String> {
+    let own = window.label() == crate::TITLEBAR && window.url().map(|u| is_launcher_url(&u)).unwrap_or(false);
+    if !own {
+        return Err(tr("Solo disponible desde la barra de la app.", "Only available from the app's title bar.").into());
+    }
+    #[cfg(desktop)]
+    {
+        let frame = window.window();
+        let content = app.get_webview(crate::CONTENT).ok_or("content")?;
+        let done = match action.as_str() {
+            "minimize" => frame.minimize(),
+            "maximize" => if frame.is_maximized().unwrap_or(false) { frame.unmaximize() } else { frame.maximize() },
+            "close" => frame.close(),
+            "drag" => frame.start_dragging(),
+            "back" => content.eval("history.back()"),
+            "servers" => return go_to_launcher(&content, "switch"),
+            // The way out of anything the window got into: the server's own start page (sign-in or workspace).
+            "home" => {
+                let current = store.config.lock().unwrap().current.clone();
+                return match current.and_then(|c| Url::parse(&c).ok()) {
+                    Some(tenant) => content.navigate(tenant).map_err(|e| e.to_string()),
+                    None => go_to_launcher(&content, "switch"),
+                };
+            }
+            _ => return Err("unknown action".into()),
+        };
+        done.map_err(|e| e.to_string())
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, store, action);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod chrome_tests {
+    use super::{clean_color, clean_icon};
+
+    #[test]
+    fn only_plain_colours_reach_the_title_bar() {
+        assert_eq!(clean_color(" rgb(13, 13, 12) ").as_deref(), Some("rgb(13, 13, 12)"));
+        assert_eq!(clean_color("#0d0d0c").as_deref(), Some("#0d0d0c"));
+        assert_eq!(clean_color("rgba(0, 0, 0, 0.5)").as_deref(), Some("rgba(0, 0, 0, 0.5)"));
+        for bad in ["red; background:url(x)", "url(javascript:1)", "rgb(1,2,3);}</style>", "", "expression(alert(1))"] {
+            assert_eq!(clean_color(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_icon_must_be_a_web_address() {
+        assert!(clean_icon("https://a.example.com/icon.png").is_some());
+        assert!(clean_icon("http://localhost:3000/icon.png").is_some());
+        for bad in ["http://a.example.com/i.png", "file:///c:/x.png", "javascript:alert(1)", "data:image/png;base64,AAAA", ""] {
+            assert_eq!(clean_icon(bad), None, "{bad}");
+        }
+    }
 }

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Killio</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f6f4; --fg: #1b1b19; --hover: rgba(0,0,0,.07); }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0c; --fg: #f1f1ec; --hover: rgba(255,255,255,.09); } }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 12.5px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; gap: 4px; padding: 0 8px 0 12px;
+    user-select: none; -webkit-user-select: none; cursor: default;
+    transition: background-color .25s ease, color .25s ease;
+  }
+  body.mac { padding-left: 78px; } /* room for the system's own window buttons */
+  body.mac .lights { display: none; }
+
+  /* Window buttons, macOS style: colour only, the glyph appears when the group is hovered. */
+  .lights { display: flex; gap: 8px; margin-right: 10px; }
+  .light {
+    width: 12px; height: 12px; border-radius: 50%; border: 0; padding: 0; cursor: default;
+    display: grid; place-items: center; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.18);
+  }
+  .light svg { width: 8px; height: 8px; opacity: 0; stroke: rgba(0,0,0,.6); stroke-width: 1.4; fill: none; stroke-linecap: round; }
+  .lights:hover .light svg, .light:focus-visible svg { opacity: 1; }
+  .light:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .close { background: #ff5f57; } .min { background: #febc2e; } .max { background: #28c840; }
+  body.blurred .light { background: color-mix(in srgb, var(--fg) 22%, transparent); }
+
+  .ghost {
+    height: 24px; border: 0; background: none; color: inherit; font: inherit; border-radius: 7px;
+    display: inline-flex; align-items: center; gap: 7px; padding: 0 7px; cursor: default; max-width: 40vw;
+  }
+  .ghost:hover, .ghost:focus-visible { background: var(--hover); outline: none; }
+  .ghost img { width: 16px; height: 16px; border-radius: 4px; object-fit: contain; }
+  .ghost span { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ghost svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: .75; }
+  .drag { flex: 1; align-self: stretch; }
+</style>
+</head>
+<body>
+  <div class="lights" role="group">
+    <button class="light close" data-action="close" data-i18n-label="close"><svg viewBox="0 0 8 8"><path d="M1.5 1.5l5 5M6.5 1.5l-5 5"/></svg></button>
+    <button class="light min" data-action="minimize" data-i18n-label="minimize"><svg viewBox="0 0 8 8"><path d="M1.2 4h5.6"/></svg></button>
+    <button class="light max" data-action="maximize" data-i18n-label="maximize"><svg viewBox="0 0 8 8"><path d="M2 6V2h4M6 2v4H2" /></svg></button>
+  </div>
+
+  <!-- The server's logo: always a way back to its start page, whatever the window is showing. -->
+  <button class="ghost" id="home" data-action="home" data-i18n-label="home">
+    <img id="logo" src="icon.png" alt="" />
+    <span id="name">Killio</span>
+  </button>
+
+  <div class="drag" id="drag"></div>
+
+  <button class="ghost" data-action="back" data-i18n-label="back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="ghost" data-action="servers" data-i18n-label="servers"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="6.5" rx="2"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="2"/><path d="M7.5 7.25h.01M7.5 16.75h.01"/></svg></button>
+
+<script>
+(function () {
+  var STRINGS = {
+    es: { close: "Cerrar", minimize: "Minimizar", maximize: "Maximizar", home: "Ir al inicio de {name}", back: "Atrás", servers: "Cambiar de servidor" },
+    en: { close: "Close", minimize: "Minimize", maximize: "Maximize", home: "Go to {name}'s start page", back: "Back", servers: "Switch server" }
+  };
+  var lang = /^es(-|_|$)/i.test(window.__KILLIO_LANG__ || navigator.language || "") ? "es" : "en";
+  var name = "Killio";
+  function label() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-i18n-label]"), function (el) {
+      var text = STRINGS[lang][el.getAttribute("data-i18n-label")].replace("{name}", name);
+      el.title = text;
+      el.setAttribute("aria-label", text);
+    });
+  }
+  document.documentElement.lang = lang;
+  if (/Mac/i.test(navigator.platform || navigator.userAgent)) document.body.classList.add("mac");
+  label();
+
+  function act(action) {
+    var internals = window.__TAURI_INTERNALS__;
+    if (internals) internals.invoke("chrome_action", { action: action }).catch(function () {});
+  }
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest ? event.target.closest("[data-action]") : null;
+    if (button) act(button.getAttribute("data-action"));
+  });
+  // Anywhere that is not a button moves the window; a double click toggles full size, as on macOS.
+  document.addEventListener("mousedown", function (event) {
+    if (event.button !== 0 || (event.target.closest && event.target.closest("[data-action]"))) return;
+    if (event.detail === 2) act("maximize"); else act("drag");
+  });
+  document.addEventListener("contextmenu", function (event) { event.preventDefault(); });
+  window.addEventListener("blur", function () { document.body.classList.add("blurred"); });
+  window.addEventListener("focus", function () { document.body.classList.remove("blurred"); });
+
+  // The page below tells the app its colour, name and icon; the bar takes them so both read as one surface.
+  window.__setChrome = function (chrome) {
+    if (chrome.color) {
+      var m = /(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(chrome.color);
+      document.body.style.setProperty("--bg", chrome.color);
+      if (m) {
+        var dark = (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) < 140;
+        document.body.style.setProperty("--fg", dark ? "#f1f1ec" : "#1b1b19");
+        document.body.style.setProperty("--hover", dark ? "rgba(255,255,255,.09)" : "rgba(0,0,0,.07)");
+      }
+    }
+    if (chrome.name) { name = chrome.name; document.getElementById("name").textContent = name; label(); }
+    var logo = document.getElementById("logo");
+    var wanted = chrome.icon || "icon.png";
+    if (logo.getAttribute("src") !== wanted) {
+      logo.onerror = function () { logo.onerror = null; logo.src = "icon.png"; };
+      logo.src = wanted;
+    }
+  };
+})();
+</script>
+</body>
+</html>

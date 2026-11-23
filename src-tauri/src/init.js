@@ -16,11 +16,14 @@
   var isLauncher = location.protocol === "tauri:" || location.hostname === "tauri.localhost";
   var AUTH_PAGES = /^\/(login|signup|forgot-password|verify-otp|change-password)(\/|$)/;
   function signedIn() { return /(?:^|;\s*)killio_token=[^;]+/.test(document.cookie); }
+  // The rules are for the server the user chose, not for a site the window is passing through (a sign-in
+  // provider). The app answers `app_info` only to the chosen server, so that answer is the test.
+  var onServer = false;
   function skipLanding() {
-    if (!isLauncher && location.pathname === "/" && !signedIn()) location.replace("/login");
+    if (onServer && location.pathname === "/" && !signedIn()) location.replace("/login");
   }
   if (!isLauncher) {
-    skipLanding(); // before the page draws anything
+    invoke("app_info").then(function () { onServer = true; skipLanding(); }, function () {});
     // In-page navigation (the frontend's router) does not reload the page: watch the address too.
     ["pushState", "replaceState"].forEach(function (name) {
       var original = history[name];
@@ -32,7 +35,7 @@
     });
     window.addEventListener("popstate", function () { setTimeout(skipLanding, 0); });
     document.addEventListener("click", function (event) {
-      if (!AUTH_PAGES.test(location.pathname) || event.defaultPrevented) return;
+      if (!onServer || !AUTH_PAGES.test(location.pathname) || event.defaultPrevented) return;
       var link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
       if (!link || link.getAttribute("href") !== "/") return;
       event.preventDefault();
@@ -40,6 +43,34 @@
       invoke("switch_tenant");
     }, true);
   }
+
+  // ── Title bar and shortcuts ───────────────────────────────────────────────
+  // The window has no system frame and no menu. The page tells the app its colour, name and icon so the
+  // app's own title bar reads as part of it, and the shortcuts the menu used to carry live here.
+  var lastChrome = "";
+  function reportChrome() {
+    if (!document.body) return;
+    var color = getComputedStyle(document.body).backgroundColor;
+    if (!color || /rgba\(0, 0, 0, 0\)|transparent/.test(color)) color = getComputedStyle(document.documentElement).backgroundColor;
+    var link = document.querySelector('link[rel~="icon"], link[rel="apple-touch-icon"]');
+    var chrome = isLauncher
+      ? { color: color, name: "Killio", icon: null }
+      : { color: color, name: (document.title || "").split(/\s[|·—-]\s/)[0].trim() || location.hostname, icon: link ? link.href : location.origin + "/favicon.ico" };
+    var key = JSON.stringify(chrome);
+    if (key === lastChrome) return;
+    lastChrome = key;
+    invoke("set_chrome", { chrome: chrome }).catch(function () { lastChrome = ""; });
+  }
+  document.addEventListener("DOMContentLoaded", reportChrome);
+  window.addEventListener("load", reportChrome);
+  setInterval(reportChrome, 2000); // theme switches and title changes after load
+
+  window.addEventListener("keydown", function (event) {
+    if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey) return;
+    var key = (event.key || "").toLowerCase();
+    if (key === "t") { event.preventDefault(); invoke("switch_tenant"); }
+    if (key === "s") { event.preventDefault(); invoke("save_screenshot"); }
+  }, true);
 
   window.__KILLIO_APP__ = { shell: "tauri", bridge: 1 };
   window.killioApp = {
