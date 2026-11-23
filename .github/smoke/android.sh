@@ -4,7 +4,8 @@
 set -u
 mkdir -p smoke
 package="dev.killio.client"
-apk="$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -1)"
+apk="$(find "${APK_DIR:-src-tauri/gen/android/app/build/outputs/apk}" -name '*.apk' | head -1)"
+[ -n "$apk" ] || { echo "no APK found"; exit 1; }
 echo "apk: $apk ($(du -h "$apk" | cut -f1))"
 
 adb install -r "$apk" || { echo "INSTALL FAILED"; exit 1; }
