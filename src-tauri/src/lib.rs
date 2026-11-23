@@ -1,6 +1,7 @@
 mod apps;
 mod commands;
 mod config;
+mod deeplink;
 mod i18n;
 #[cfg(desktop)]
 mod icon;
@@ -16,7 +17,18 @@ pub const TITLEBAR: &str = "titlebar";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Desktop: a `killio://` link starts a second copy of the program. Keep one window: the second copy
+    // passes its link to the running one and exits.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .manage(config::Store::default())
         .invoke_handler(tauri::generate_handler![
@@ -51,6 +63,29 @@ pub fn run() {
             tauri::WebviewWindowBuilder::new(app, CONTENT, WebviewUrl::App("index.html".into()))
                 .initialization_script(&init)
                 .build()?;
+
+            // `killio://` links (see deeplink.rs).
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                // Installers register the scheme; this also covers a copy run without installing.
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                let _ = app.deep_link().register_all();
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for link in event.urls() {
+                        let current = handle.state::<config::Store>().config.lock().unwrap().current.clone();
+                        let Some(target) = deeplink::destination(link.as_str(), current.as_deref()) else { continue };
+                        if let Some(content) = handle.get_webview(CONTENT) {
+                            let _ = content.navigate(target);
+                        }
+                        #[cfg(desktop)]
+                        if let Some(window) = handle.get_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                });
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

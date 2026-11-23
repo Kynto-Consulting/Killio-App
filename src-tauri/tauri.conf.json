@@ -12,6 +12,13 @@
       "csp": null
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["killio"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
