@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-claude-cancel"
+description = "Enables the claude_cancel command without any pre-configured scope."
+commands.allow = ["claude_cancel"]
+
+[[permission]]
+identifier = "deny-claude-cancel"
+description = "Denies the claude_cancel command without any pre-configured scope."
+commands.deny = ["claude_cancel"]

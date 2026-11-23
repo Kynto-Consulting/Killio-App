@@ -37,7 +37,7 @@ fn require_launcher(window: &Webview, store: &Store) -> Result<(), String> {
     if caller(window, store) == Caller::Launcher { Ok(()) } else { Err(tr("Solo disponible desde el selector de servidor.", "Only available from the server picker.").into()) }
 }
 
-fn require_trusted(window: &Webview, store: &Store) -> Result<(), String> {
+pub(crate) fn require_trusted(window: &Webview, store: &Store) -> Result<(), String> {
     if caller(window, store) == Caller::Other { Err(tr("Esta página no puede usar funciones nativas.", "This page cannot use native features.").into()) } else { Ok(()) }
 }
 
@@ -56,6 +56,7 @@ pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<
     if cfg!(desktop) {
         features.push("screenshot");
         features.push("apps");
+        features.push("claude");
     }
     Ok(AppInfo {
         version: app.package_info().version.to_string(),

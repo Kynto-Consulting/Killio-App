@@ -1,6 +1,7 @@
 mod apps;
 mod commands;
 mod config;
+mod claude;
 mod deeplink;
 mod i18n;
 #[cfg(desktop)]
@@ -31,6 +32,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .manage(config::Store::default())
+        .manage(claude::Bridge::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::app_state,
@@ -48,6 +50,13 @@ pub fn run() {
             commands::open_app,
             commands::set_chrome,
             commands::chrome_action,
+            claude::claude_status,
+            claude::claude_start,
+            claude::claude_stop,
+            claude::claude_models,
+            claude::claude_send,
+            claude::claude_poll,
+            claude::claude_cancel,
         ])
         .setup(|app| {
             let store = app.state::<config::Store>();
@@ -88,8 +97,14 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Killio App");
+        .build(tauri::generate_context!())
+        .expect("error while building Killio App")
+        .run(|app, event| {
+            // The Claude bridge is a child of the app: it never outlives the window.
+            if let tauri::RunEvent::Exit = event {
+                app.state::<claude::Bridge>().stop();
+            }
+        });
 }
 
 /// The desktop window: no system frame and no menu bar. A slim title bar of the app's own sits on top

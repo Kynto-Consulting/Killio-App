@@ -86,5 +86,16 @@
     listApps: function () { return invoke("list_apps"); },
     openApp: function (pkg) { return invoke("open_app", { package: pkg }); },
     openAccount: function (tenant, accountId) { return invoke("open_account", { tenant: tenant, accountId: accountId }); },
+    // The person's own Claude Code as AI provider (desktop). The page sends Anthropic Messages requests
+    // through the app and reads the stream by polling; it never sees the bridge's address or key.
+    claude: {
+      status: function () { return invoke("claude_status"); },
+      start: function () { return invoke("claude_start"); },
+      stop: function () { return invoke("claude_stop"); },
+      models: function () { return invoke("claude_models"); },
+      send: function (request) { return invoke("claude_send", { request: request }); },
+      poll: function (id) { return invoke("claude_poll", { id: id }); },
+      cancel: function (id) { return invoke("claude_cancel", { id: id }); },
+    },
   };
 })();

@@ -25,6 +25,13 @@
     "allow-open-app",
     "allow-save-screenshot",
     "allow-set-chrome",
-    "allow-chrome-action"
+    "allow-chrome-action",
+    "allow-claude-status",
+    "allow-claude-start",
+    "allow-claude-stop",
+    "allow-claude-models",
+    "allow-claude-send",
+    "allow-claude-poll",
+    "allow-claude-cancel"
   ]
 }

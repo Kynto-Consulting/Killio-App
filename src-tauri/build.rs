@@ -19,6 +19,13 @@ fn main() {
             "save_screenshot",
             "set_chrome",
             "chrome_action",
+            "claude_status",
+            "claude_start",
+            "claude_stop",
+            "claude_models",
+            "claude_send",
+            "claude_poll",
+            "claude_cancel",
         ]),
     ))
     .expect("failed to run tauri-build");
