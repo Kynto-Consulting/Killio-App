@@ -13,7 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # "unstable": several webviews in one window (the app's title bar above the page).
-tauri = { version = "2", features = ["unstable"] }
+tauri = { version = "2", features = ["unstable", "tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-killio-device = { path = "plugins/device" }
 serde = { version = "1", features = ["derive"] }

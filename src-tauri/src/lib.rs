@@ -6,6 +6,8 @@ mod deeplink;
 mod i18n;
 #[cfg(desktop)]
 mod icon;
+#[cfg(desktop)]
+mod tray;
 
 use tauri::{Manager, WebviewUrl};
 
@@ -23,18 +25,18 @@ pub fn run() {
     // passes its link to the running one and exits.
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        if let Some(window) = main_window(app) {
-            let _ = window.unminimize();
-            let _ = window.set_focus();
-        }
+        tray::reveal(app);
     }));
-    builder
+    let builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_killio_device::init())
         .plugin(tauri_plugin_notification::init())
         .manage(config::Store::default())
-        .manage(claude::Bridge::default())
+        .manage(claude::Bridge::default());
+    #[cfg(desktop)]
+    let builder = builder.manage(tray::Background::default());
+    builder
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::app_state,
@@ -79,6 +81,10 @@ pub fn run() {
                 linux::build(app, &init)?;
             }
 
+            // The way back to a window that keeps listening after being closed (see tray.rs).
+            #[cfg(desktop)]
+            tray::build(app)?;
+
             // A phone has no window chrome to replace: one full-screen webview.
             #[cfg(mobile)]
             tauri::WebviewWindowBuilder::new(app, CONTENT, WebviewUrl::App("index.html".into()))
@@ -100,10 +106,7 @@ pub fn run() {
                             let _ = content.navigate(target);
                         }
                         #[cfg(desktop)]
-                        if let Some(window) = main_window(&handle) {
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
-                        }
+                        tray::reveal(&handle);
                     }
                 });
             }
@@ -112,7 +115,14 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Killio App")
         .run(|app, event| {
-            // The Claude bridge is a child of the app: it never outlives the window.
+            // Closing the window while listening keeps the app in the tray instead of ending it.
+            #[cfg(desktop)]
+            if let tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::CloseRequested { api, .. }, .. } = &event {
+                if tray::keep_in_background(app) {
+                    api.prevent_close();
+                }
+            }
+            // The Claude bridge is a child of the app: it never outlives it.
             if let tauri::RunEvent::Exit = event {
                 app.state::<claude::Bridge>().stop();
             }

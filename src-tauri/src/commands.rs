@@ -57,6 +57,7 @@ pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<
         features.push("screenshot");
         features.push("apps");
         features.push("claude");
+        features.push("background");
     }
     if cfg!(target_os = "android") {
         features.push("deviceTools");
@@ -484,6 +485,7 @@ pub fn set_chrome(app: AppHandle, window: Webview, store: State<Store>, chrome: 
             let json = serde_json::to_string(&chrome).map_err(|e| e.to_string())?;
             let _ = bar.eval(&format!("window.__setChrome && window.__setChrome({json})"));
         }
+        crate::tray::set_listening(&app, chrome.listening == Some(true));
         crate::icon::follow(&app, chrome.icon);
     }
     #[cfg(not(desktop))]
