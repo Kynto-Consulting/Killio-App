@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "dev.killio.device"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 24
