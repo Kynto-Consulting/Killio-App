@@ -1,3 +1,5 @@
+#[cfg(desktop)]
+mod apps;
 mod commands;
 mod config;
 mod i18n;
@@ -23,6 +25,8 @@ pub fn run() {
             commands::report_accounts,
             commands::list_accounts,
             commands::open_account,
+            commands::list_apps,
+            commands::open_app,
         ])
         .setup(|app| {
             let store = app.state::<config::Store>();

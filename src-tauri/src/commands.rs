@@ -55,6 +55,7 @@ pub fn app_info(app: AppHandle, window: WebviewWindow, store: State<Store>) -> R
     let mut features = vec!["switchTenant", "openExternal", "accounts"];
     if cfg!(desktop) {
         features.push("screenshot");
+        features.push("apps");
     }
     Ok(AppInfo {
         version: app.package_info().version.to_string(),
@@ -256,12 +257,62 @@ pub fn open_account(window: WebviewWindow, store: State<Store>, tenant: String, 
     window.navigate(start).map_err(|e| e.to_string())
 }
 
+/// Links a page may hand to the system. Web, mail and phone links everywhere; each system's own schemes
+/// (its settings app, Apple Shortcuts) only on that system.
+fn allowed_scheme(scheme: &str) -> bool {
+    if matches!(scheme, "http" | "https" | "mailto" | "tel" | "sms") {
+        return true;
+    }
+    match scheme {
+        "ms-settings" => cfg!(target_os = "windows"),
+        "x-apple.systempreferences" => cfg!(target_os = "macos"),
+        "shortcuts" => cfg!(any(target_os = "macos", target_os = "ios")),
+        _ => false,
+    }
+}
+
+/// Apps installed on this computer, for the agent's app tools. Desktop only.
+#[tauri::command]
+pub async fn list_apps(window: WebviewWindow, store: State<'_, Store>) -> Result<Vec<crate::apps::InstalledApp>, String> {
+    require_trusted(&window, &store)?;
+    #[cfg(desktop)]
+    {
+        tauri::async_runtime::spawn_blocking(crate::apps::list).await.map_err(|e| e.to_string())
+    }
+    #[cfg(not(desktop))]
+    {
+        Err(tr("No disponible en este dispositivo.", "Not available on this device.").into())
+    }
+}
+
+/// Opens one of the apps `list_apps` returned. Anything else is refused.
+#[tauri::command]
+pub fn open_app(app: AppHandle, window: WebviewWindow, store: State<Store>, package: String) -> Result<(), String> {
+    require_trusted(&window, &store)?;
+    #[cfg(desktop)]
+    {
+        let path = crate::apps::resolve(&package).ok_or(tr("Esa aplicación no está instalada.", "That app is not installed."))?;
+        if cfg!(target_os = "linux") {
+            // A .desktop entry is launched by its id, not opened as a file (that would show it in an editor).
+            let id = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
+            std::process::Command::new("gtk-launch").arg(id).spawn().map(|_| ()).map_err(|e| e.to_string())
+        } else {
+            app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+        }
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, package);
+        Err(tr("No disponible en este dispositivo.", "Not available on this device.").into())
+    }
+}
+
 #[tauri::command]
 pub fn open_external(app: AppHandle, window: WebviewWindow, store: State<Store>, url: String) -> Result<(), String> {
     require_trusted(&window, &store)?;
     let parsed = Url::parse(&url).map_err(|_| tr("URL no válida.", "The URL is not valid.").to_string())?;
-    if !matches!(parsed.scheme(), "http" | "https" | "mailto" | "tel") {
-        return Err(tr("Solo se pueden abrir enlaces http, https, mailto o tel.", "Only http, https, mailto and tel links can be opened.").into());
+    if !allowed_scheme(parsed.scheme()) {
+        return Err(tr("Ese tipo de enlace no se puede abrir en este dispositivo.", "That kind of link cannot be opened on this device.").into());
     }
     app.opener().open_url(parsed.as_str(), None::<&str>).map_err(|e| e.to_string())
 }

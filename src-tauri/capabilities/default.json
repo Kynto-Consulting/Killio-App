@@ -19,6 +19,8 @@
     "allow-open-external",
     "allow-report-accounts",
     "allow-list-accounts",
-    "allow-open-account"
+    "allow-open-account",
+    "allow-list-apps",
+    "allow-open-app"
   ]
 }

@@ -14,6 +14,8 @@ fn main() {
             "report_accounts",
             "list_accounts",
             "open_account",
+            "list_apps",
+            "open_app",
         ]),
     ))
     .expect("failed to run tauri-build");

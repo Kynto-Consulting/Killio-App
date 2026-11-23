@@ -14,7 +14,8 @@ jobs:
           - os: windows-latest
           - os: macos-latest
             args: --target universal-apple-darwin
-          - os: ubuntu-22.04
+          # 24.04: the screen-capture crate needs PipeWire newer than 22.04 ships.
+          - os: ubuntu-24.04
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +50,7 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.rpm
 
   android:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,11 +60,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
-      - name: Install NDK
-        run: |
-          sdkmanager "ndk;27.0.12077973"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+      # The runner image already has the Android SDK (ANDROID_HOME) and an NDK.
+      - name: Point Tauri at the NDK
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
