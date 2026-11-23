@@ -1,0 +1,32 @@
+[package]
+name = "killio-app"
+version = "0.1.0"
+description = "Killio native shell"
+edition = "2021"
+
+[lib]
+name = "killio_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+base64 = "0.22"
+ureq = "2"
+sys-locale = "0.3.2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+xcap = "0.9.10"

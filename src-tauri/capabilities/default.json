@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main window. Remote pages may reach the IPC, but every command checks in Rust that the page is the launcher or the chosen tenant.",
+  "windows": ["main"],
+  "local": true,
+  "remote": {
+    "urls": ["https://*", "http://localhost:*", "http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "core:default",
+    "allow-app-info",
+    "allow-app-state",
+    "allow-probe-tenant",
+    "allow-open-tenant",
+    "allow-remove-tenant",
+    "allow-switch-tenant",
+    "allow-capture-screenshot",
+    "allow-open-external",
+    "allow-report-accounts",
+    "allow-list-accounts",
+    "allow-open-account"
+  ]
+}

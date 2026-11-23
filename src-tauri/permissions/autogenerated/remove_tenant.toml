@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remove-tenant"
+description = "Enables the remove_tenant command without any pre-configured scope."
+commands.allow = ["remove_tenant"]
+
+[[permission]]
+identifier = "deny-remove-tenant"
+description = "Denies the remove_tenant command without any pre-configured scope."
+commands.deny = ["remove_tenant"]

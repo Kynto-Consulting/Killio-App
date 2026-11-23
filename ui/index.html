@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Killio</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f6f4; --panel: #ffffff; --line: #e3e3de; --text: #1b1b19; --muted: #6d6d66;
+    --accent: #d8ff72; --accent-text: #1b1b19; --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d0d0c; --panel: #171716; --line: #2a2a27; --text: #f1f1ec; --muted: #9a9a92; --danger: #ff7b6b; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid; place-items: center; padding: 16px;
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+  main { width: 100%; max-width: 380px; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  p.sub { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px; }
+  .tenant { display: flex; align-items: center; gap: 6px; }
+  .tenant + .tenant { border-top: 1px solid var(--line); }
+  .tenant button.open {
+    flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: inherit; font: inherit;
+    padding: 9px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .tenant button.open:hover, .tenant button.open:focus-visible { background: var(--bg); outline: none; }
+  .tenant .name { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tenant .url { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tenant button.remove {
+    background: none; border: 0; color: var(--muted); cursor: pointer; padding: 8px 10px; border-radius: 8px; font-size: 14px;
+  }
+  .tenant button.remove:hover { color: var(--danger); }
+  form { display: grid; gap: 8px; margin-top: 12px; }
+  label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  input {
+    width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); color: inherit; font: inherit;
+  }
+  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn {
+    padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+    color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row .btn { flex: 1; }
+  .error { color: var(--danger); font-size: 13px; min-height: 18px; margin: 6px 2px 0; }
+  .status { text-align: center; color: var(--muted); padding: 30px 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <section id="connecting" class="status" hidden>
+    <p id="connecting-text"></p>
+  </section>
+
+  <section id="offline" hidden>
+    <h1 data-i18n="offlineTitle"></h1>
+    <p class="sub" id="offline-text"></p>
+    <div class="row">
+      <button class="btn primary" id="retry" data-i18n="retry"></button>
+      <button class="btn" id="open-offline" data-i18n="openOffline"></button>
+    </div>
+    <p class="sub" style="margin-top:10px" data-i18n="offlineHint"></p>
+    <button class="btn" id="choose-other" style="width:100%" data-i18n="chooseOther"></button>
+  </section>
+
+  <section id="picker" hidden>
+    <h1 data-i18n="pickTitle"></h1>
+    <p class="sub" data-i18n="pickSub"></p>
+    <div class="panel" id="tenants"></div>
+    <form id="add">
+      <label><span data-i18n="urlLabel"></span>
+        <input id="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      </label>
+      <button class="btn primary" type="submit" id="connect" data-i18n="connect"></button>
+    </form>
+    <p class="error" id="error" role="alert"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var internals = window.__TAURI_INTERNALS__;
+  function invoke(cmd, args) { return internals.invoke(cmd, args || {}); }
+  function $(id) { return document.getElementById(id); }
+  function show(id) {
+    ["connecting", "offline", "picker"].forEach(function (s) { $(s).hidden = s !== id; });
+  }
+  // The launcher's own strings. The system language picks one; English covers every other language.
+  var STRINGS = {
+    es: { offlineTitle: "Sin conexión", retry: "Reintentar", openOffline: "Abrir sin conexión", offlineHint: "Sin conexión solo verás lo que ya abriste antes en este dispositivo.", chooseOther: "Elegir otro servidor", pickTitle: "Elige dónde conectarte", pickSub: "Killio o el espacio de tu organización.", urlLabel: "URL de tu organización", connect: "Conectar", connecting: "Conectando a {name}…", unreachable: "No se pudo llegar a {name}.", remove: "Quitar {name}", needUrl: "Escribe la URL de tu organización.", onlyInApp: "Esta página solo funciona dentro de Killio App.", failed: "Algo salió mal.", urlPlaceholder: "killio.tuempresa.com" },
+    en: { offlineTitle: "No connection", retry: "Try again", openOffline: "Open offline", offlineHint: "Offline you will only see what you already opened on this device.", chooseOther: "Choose another server", pickTitle: "Choose where to connect", pickSub: "Killio or your organization's own space.", urlLabel: "Your organization's URL", connect: "Connect", connecting: "Connecting to {name}…", unreachable: "Could not reach {name}.", remove: "Remove {name}", needUrl: "Type your organization's URL.", onlyInApp: "This page only works inside Killio App.", failed: "Something went wrong.", urlPlaceholder: "killio.yourcompany.com" }
+  };
+  // The app passes the system language; the webview's own can differ from it.
+  var lang = /^es(-|_|$)/i.test(window.__KILLIO_LANG__ || navigator.language || "") ? "es" : "en";
+  function tr(key, vars) {
+    var text = STRINGS[lang][key] || STRINGS.en[key] || key;
+    return text.replace(/\{(\w+)\}/g, function (_m, name) { return vars && vars[name] != null ? vars[name] : ""; });
+  }
+  document.documentElement.lang = lang;
+  Array.prototype.forEach.call(document.querySelectorAll("[data-i18n]"), function (el) { el.textContent = tr(el.getAttribute("data-i18n")); });
+  document.getElementById("url").placeholder = tr("urlPlaceholder");
+  function message(e) { return typeof e === "string" ? e : (e && e.message) || tr("failed"); }
+
+  var pending = null; // tenant shown in the offline panel
+
+  function renderTenants(config) {
+    var list = $("tenants");
+    list.textContent = "";
+    config.tenants.forEach(function (tenant, index) {
+      var row = document.createElement("div");
+      row.className = "tenant";
+      var open = document.createElement("button");
+      open.className = "open";
+      open.type = "button";
+      var name = document.createElement("span");
+      name.className = "name";
+      name.textContent = tenant.name;
+      var url = document.createElement("span");
+      url.className = "url";
+      url.textContent = tenant.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      open.append(name, url);
+      open.addEventListener("click", function () { connect(tenant); });
+      row.append(open);
+      if (index > 0) {
+        var remove = document.createElement("button");
+        remove.className = "remove";
+        remove.type = "button";
+        remove.setAttribute("aria-label", tr("remove", { name: tenant.name }));
+        remove.textContent = "✕";
+        remove.addEventListener("click", function () {
+          invoke("remove_tenant", { url: tenant.url }).then(renderTenants);
+        });
+        row.append(remove);
+      }
+      list.append(row);
+    });
+  }
+
+  // `resume` is the automatic start: with no connection it goes straight into the last server,
+  // which shows what this device already has saved. A server picked by hand asks first.
+  function connect(tenant, resume) {
+    pending = tenant;
+    $("error").textContent = "";
+    $("connecting-text").textContent = tr("connecting", { name: tenant.name });
+    show("connecting");
+    invoke("probe_tenant", { url: tenant.url }).then(function (resolved) {
+      if (resolved) return invoke("open_tenant", { url: resolved, name: tenant.name, replaces: tenant.url });
+      if (resume) return invoke("open_tenant", { url: tenant.url, name: tenant.name });
+      $("offline-text").textContent = tr("unreachable", { name: tenant.name });
+      show("offline");
+    }).catch(function (e) {
+      show("picker");
+      $("error").textContent = message(e);
+    });
+  }
+
+  $("retry").addEventListener("click", function () { if (pending) connect(pending); });
+  $("open-offline").addEventListener("click", function () {
+    if (pending) invoke("open_tenant", { url: pending.url, name: pending.name });
+  });
+  $("choose-other").addEventListener("click", function () { show("picker"); });
+  $("add").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var value = $("url").value.trim();
+    if (!value) { $("error").textContent = tr("needUrl"); return; }
+    var host = value.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    connect({ name: host, url: value });
+  });
+
+  if (!internals) {
+    show("picker");
+    $("error").textContent = tr("onlyInApp");
+    return;
+  }
+  invoke("app_state").then(function (config) {
+    renderTenants(config);
+    var switching = location.hash === "#switch";
+    var last = config.tenants.filter(function (t) { return t.url === config.current; })[0];
+    if (!switching && last) connect(last, true); else show("picker");
+  }).catch(function (e) {
+    show("picker");
+    $("error").textContent = message(e);
+  });
+})();
+</script>
+</body>
+</html>

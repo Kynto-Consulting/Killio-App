@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-probe-tenant"
+description = "Enables the probe_tenant command without any pre-configured scope."
+commands.allow = ["probe_tenant"]
+
+[[permission]]
+identifier = "deny-probe-tenant"
+description = "Denies the probe_tenant command without any pre-configured scope."
+commands.deny = ["probe_tenant"]
