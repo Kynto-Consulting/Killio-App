@@ -66,8 +66,14 @@ pub fn run() {
 
             #[cfg(all(desktop, not(target_os = "linux")))]
             desktop::build(app, &init)?;
+            // Linux has both arrangements so they can be compared on a real desktop: the framed one by
+            // default, the frameless one with KILLIO_FRAMELESS=1.
             #[cfg(target_os = "linux")]
-            linux::build(app, &init)?;
+            if std::env::var("KILLIO_FRAMELESS").as_deref() == Ok("1") {
+                desktop::build(app, &init)?;
+            } else {
+                linux::build(app, &init)?;
+            }
 
             // A phone has no window chrome to replace: one full-screen webview.
             #[cfg(mobile)]
@@ -116,8 +122,8 @@ pub fn main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
 }
 
 /// Linux: one webview in a window with the system's own frame, and the app's controls in a menu.
-/// The two-webview window used on Windows and macOS does not come up under GTK (no window is ever
-/// shown; found by running the build in CI), so Linux keeps the plain arrangement that does.
+/// The plain arrangement, kept as the default on Linux until the frameless one (`desktop`) is seen
+/// working on real Linux desktops; set KILLIO_FRAMELESS=1 to try that one.
 #[cfg(target_os = "linux")]
 mod linux {
     use tauri::{
@@ -172,7 +178,7 @@ mod linux {
 /// Windows and macOS: no system frame and no menu bar. A slim title bar of the app's own sits on top
 /// and the page gets everything below it, as two separate webviews. The page therefore keeps its real
 /// viewport and never has to make room for the app's chrome, whatever frontend version it is.
-#[cfg(all(desktop, not(target_os = "linux")))]
+#[cfg(desktop)]
 mod desktop {
     use tauri::{webview::WebviewBuilder, window::WindowBuilder, App, LogicalPosition, LogicalSize, Window, WindowEvent};
 

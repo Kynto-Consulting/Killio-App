@@ -8,7 +8,7 @@ mkdir -p smoke
 log="smoke/$system.log"
 
 case "$system" in
-  linux)
+  linux*)
     binary="$(find src-tauri/target -path '*release/killio-app' -type f | head -1)"
     ;;
   macos)
@@ -33,7 +33,7 @@ else
 fi
 
 case "$system" in
-  linux)
+  linux*)
     # A black picture can mean "nothing drawn" or "no window": list the windows to tell them apart.
     echo "--- windows on the display:"
     xwininfo -root -tree 2>/dev/null | grep -E '^\s+0x' | head -20
