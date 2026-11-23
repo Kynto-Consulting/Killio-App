@@ -78,3 +78,49 @@ jobs:
         with:
           name: killio-android
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+  # The installers people download. `app-latest` is a rolling release: it always holds the newest build
+  # of main, and the download page of the frontend links to its files (through the frontend's own route,
+  # since this repository is private).
+  publish:
+    needs: [desktop, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect the installers
+        run: |
+          mkdir release
+          # One flat folder, stable names: Killio-<system>.<ext>
+          find artifacts -type f \( -name '*-setup.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.apk' \) -print0 |
+            while IFS= read -r -d '' file; do
+              case "$file" in
+                *-setup.exe) cp "$file" release/Killio-windows-setup.exe ;;
+                *.msi)       cp "$file" release/Killio-windows.msi ;;
+                *.dmg)       cp "$file" release/Killio-macos.dmg ;;
+                *.AppImage)  cp "$file" release/Killio-linux.AppImage ;;
+                *.deb)       cp "$file" release/Killio-linux.deb ;;
+                *.rpm)       cp "$file" release/Killio-linux.rpm ;;
+                *universal*.apk|*.apk) [ -e release/Killio-android.apk ] || cp "$file" release/Killio-android.apk ;;
+              esac
+            done
+          ls -la release
+          test -n "$(ls release)"
+      - name: Publish as app-latest
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          notes="Killio App $version, built from ${GITHUB_SHA::7}. Windows and macOS builds are not code-signed; the Android build is an unsigned preview."
+          git tag -f app-latest "$GITHUB_SHA"
+          git push -f origin app-latest
+          if gh release view app-latest > /dev/null 2>&1; then
+            gh release edit app-latest --title "Killio App $version" --notes "$notes" --prerelease=false
+          else
+            gh release create app-latest --title "Killio App $version" --notes "$notes"
+          fi
+          gh release upload app-latest release/* --clobber
