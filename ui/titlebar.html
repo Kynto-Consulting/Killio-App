@@ -37,6 +37,8 @@
   }
   .ghost:hover, .ghost:focus-visible { background: var(--hover); outline: none; }
   .ghost img { width: 16px; height: 16px; border-radius: 4px; object-fit: contain; }
+  /* The app's own mark is white: on a light bar it is drawn dark instead. A server's icon is left as it is. */
+  body.light .ghost img[src="icon.png"] { filter: brightness(0); }
   .ghost span { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ghost svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: .75; }
   .drag { flex: 1; align-self: stretch; }
@@ -87,6 +89,8 @@
   }
   document.documentElement.lang = lang;
   if (/Mac/i.test(navigator.platform || navigator.userAgent)) document.body.classList.add("mac");
+  // Until the page says its colour, the bar follows the system's light or dark setting.
+  document.body.classList.toggle("light", !window.matchMedia("(prefers-color-scheme: dark)").matches);
   label();
 
   function act(action) {
@@ -113,6 +117,7 @@
       document.body.style.setProperty("--bg", chrome.color);
       if (m) {
         var dark = (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) < 140;
+        document.body.classList.toggle("light", !dark);
         document.body.style.setProperty("--fg", dark ? "#f1f1ec" : "#1b1b19");
         document.body.style.setProperty("--hover", dark ? "rgba(255,255,255,.09)" : "rgba(0,0,0,.07)");
       }
