@@ -6,6 +6,8 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Color
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
@@ -13,9 +15,14 @@ import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.ContactsContract
 import android.view.KeyEvent
+import android.view.View
 import android.view.WindowManager
+import android.webkit.WebView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -45,6 +52,12 @@ class TorchArgs {
 @InvokeArg
 class OpenAppArgs {
     var packageName: String = ""
+}
+
+@InvokeArg
+class BarsArgs {
+    var color: String = ""
+    var dark: Boolean = true
 }
 
 @InvokeArg
@@ -85,6 +98,56 @@ class MediaArgs {
  */
 @TauriPlugin
 class DevicePlugin(private val activity: Activity) : Plugin(activity) {
+
+    /**
+     * Android draws an app under the status bar, the navigation bar and any notch. The page is a
+     * website that knows nothing about those, so the space they take (and the keyboard's, while it is
+     * up) is kept out of the page here: what the person can touch is what the page gets.
+     */
+    override fun load(webView: WebView) {
+        super.load(webView)
+        activity.runOnUiThread {
+            val content = activity.findViewById<View>(android.R.id.content)
+            val night = (activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            paintBars(if (night) Color.parseColor("#0d0d0c") else Color.parseColor("#f6f6f4"), night)
+            ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+                val taken = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime()
+                )
+                view.setPadding(taken.left, taken.top, taken.right, taken.bottom)
+                WindowInsetsCompat.CONSUMED
+            }
+            ViewCompat.requestApplyInsets(content)
+        }
+    }
+
+    /** The colour behind the system bars, and whether their icons must be light (on a dark page) or dark. */
+    private fun paintBars(color: Int, dark: Boolean) {
+        activity.window.decorView.setBackgroundColor(color)
+        activity.findViewById<View>(android.R.id.content).setBackgroundColor(color)
+        val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+        controller.isAppearanceLightStatusBars = !dark
+        controller.isAppearanceLightNavigationBars = !dark
+    }
+
+    /** The page says its colour so the bars around it read as part of it. */
+    @Command
+    fun setBars(invoke: Invoke) {
+        val args = invoke.parseArgs(BarsArgs::class.java)
+        val color = try { Color.parseColor(args.color) } catch (error: Exception) { null }
+        if (color == null) {
+            invoke.reject("Not a colour.")
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                paintBars(color, args.dark)
+                invoke.resolve(JSObject().put("painted", true))
+            } catch (error: Exception) {
+                invoke.reject(error.message ?: "The bars could not be painted.")
+            }
+        }
+    }
 
     /** Sets an alarm in the phone's clock app, without leaving Killio. */
     @Command

@@ -496,9 +496,33 @@ pub fn set_chrome(app: AppHandle, window: Webview, store: State<Store>, chrome: 
         crate::tray::set_listening(&app, chrome.listening == Some(true));
         crate::icon::follow(&app, chrome.icon);
     }
-    #[cfg(not(desktop))]
+    // Android: the system bars around the page take its colour (see DevicePlugin.kt, setBars).
+    #[cfg(target_os = "android")]
+    if let Some((r, g, b)) = chrome.color.as_deref().and_then(rgb) {
+        let dark = 0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b) < 140.0;
+        let payload = serde_json::json!({ "color": format!("#{r:02x}{g:02x}{b:02x}"), "dark": dark });
+        let _ = app.state::<tauri_plugin_killio_device::Device<tauri::Wry>>().run("setBars", payload);
+    }
+    #[cfg(not(any(desktop, target_os = "android")))]
     let _ = (app, chrome);
     Ok(())
+}
+
+/// The three channels of a CSS `rgb(r, g, b)` / `rgba(…)` or `#rrggbb` colour.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn rgb(color: &str) -> Option<(u8, u8, u8)> {
+    let c = color.trim();
+    if let Some(hex) = c.strip_prefix('#') {
+        if hex.len() != 6 {
+            return None;
+        }
+        let part = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+        return Some((part(0)?, part(2)?, part(4)?));
+    }
+    let inner = c.strip_prefix("rgba(").or_else(|| c.strip_prefix("rgb("))?.strip_suffix(')')?;
+    let mut parts = inner.split(|ch: char| ch == ',' || ch.is_whitespace()).filter(|p| !p.is_empty());
+    let mut next = || parts.next()?.parse::<f64>().ok().map(|v| v.round().clamp(0.0, 255.0) as u8);
+    Some((next()?, next()?, next()?))
 }
 
 /// Buttons of the title bar. Only the title bar itself may call this.
@@ -555,7 +579,18 @@ pub fn run_chrome_action(app: &AppHandle, frame: &tauri::Window, action: &str) -
 
 #[cfg(test)]
 mod chrome_tests {
-    use super::{clean_color, clean_icon};
+    use super::{clean_color, clean_icon, rgb};
+
+    #[test]
+    fn reads_the_channels_of_a_page_colour() {
+        assert_eq!(rgb("rgb(13, 13, 12)"), Some((13, 13, 12)));
+        assert_eq!(rgb(" rgba(250, 250, 250, 0.98) "), Some((250, 250, 250)));
+        assert_eq!(rgb("rgb(0 128 255)"), Some((0, 128, 255)));
+        assert_eq!(rgb("#0d0d0c"), Some((13, 13, 12)));
+        for bad in ["", "red", "#fff", "rgb(1, 2)", "oklch(1 0 0)"] {
+            assert_eq!(rgb(bad), None, "{bad}");
+        }
+    }
 
     #[test]
     fn only_plain_colours_reach_the_title_bar() {
