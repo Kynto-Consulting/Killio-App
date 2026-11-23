@@ -21,9 +21,16 @@ if [ -n "$pid" ]; then
   # The "Killio" row of the picker sits a little above the middle of the screen.
   size="$(adb shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+' | tail -1)"
   width="${size%x*}"; height="${size#*x}"
+  # A slow emulator shows its own "isn't responding" dialogs over the app: close them and bring the app back.
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1
+  adb shell input keyevent KEYCODE_ESCAPE
+  adb shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+  sleep 8
+  adb exec-out screencap -p > smoke/android-before-tap.png
   echo "screen: ${width}x${height}; tapping the Killio row"
   adb shell input tap "$((width / 2))" "$((height * 43 / 100))"
-  sleep 45
+  sleep 60
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1
   adb exec-out screencap -p > smoke/android-server.png
   echo "--- after choosing the server, still running: $(adb shell pidof "$package" | tr -d '\r')"
 fi
