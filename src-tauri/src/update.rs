@@ -10,13 +10,35 @@
 //! Installing: on Windows the installer is downloaded, checked against the manifest's SHA-256, started,
 //! and the app closes so it can be replaced. On the other systems the installer opens in the system's
 //! browser and the person finishes there (a .dmg to drag, a package to install, an APK to accept).
-//! The SHA-256 guards against a broken download, not against someone who controls the release itself:
-//! the builds are not code-signed yet.
+//!
+//! Trust: `latest.json` is signed in CI with Killio App's release key (ed25519) and the app carries the
+//! public half. A manifest without a valid signature is ignored, so whoever can only alter the files of
+//! the release cannot make the app install something else: the installer must match a SHA-256 that the
+//! signed manifest lists. (This is the app's own check; the installers are still not code-signed for
+//! Windows SmartScreen or macOS Gatekeeper, which needs certificates bought from Microsoft and Apple.)
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State, Webview};
 
 use crate::{commands::require_trusted, config::Store, i18n::tr};
+
+/// Public half of the release key. The private half lives only in the repository's CI secrets.
+const RELEASE_KEY: &str = "d3477247ac2f68fa74a0ae863a487070aae65d3fb3848534112a0a625415abac";
+
+/// Whether `signature` (base64) is the release key's signature of `message`.
+pub fn signed_by_release_key(message: &[u8], signature: &str) -> bool {
+    use base64::Engine;
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    let mut key = [0u8; 32];
+    for (i, byte) in key.iter_mut().enumerate() {
+        let Ok(value) = u8::from_str_radix(&RELEASE_KEY[i * 2..i * 2 + 2], 16) else { return false };
+        *byte = value;
+    }
+    let Ok(key) = VerifyingKey::from_bytes(&key) else { return false };
+    let Ok(raw) = base64::engine::general_purpose::STANDARD.decode(signature.trim()) else { return false };
+    let Ok(signature) = Signature::from_slice(&raw) else { return false };
+    key.verify(message, &signature).is_ok()
+}
 
 const RELEASE: &str = "https://github.com/Kynto-Consulting/Killio-App/releases/download/app-latest/";
 #[cfg(windows)]
@@ -71,12 +93,12 @@ fn asset() -> &'static str {
 
 fn manifest() -> Result<Manifest, String> {
     let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(15)).redirects(5).build();
-    let text = agent
-        .get(&format!("{RELEASE}latest.json"))
-        .call()
-        .map_err(|_| tr("No se pudo consultar la última versión.", "Could not check the latest version.").to_string())?
-        .into_string()
-        .map_err(|e| e.to_string())?;
+    let unreachable = || tr("No se pudo consultar la última versión.", "Could not check the latest version.").to_string();
+    let text = agent.get(&format!("{RELEASE}latest.json")).call().map_err(|_| unreachable())?.into_string().map_err(|e| e.to_string())?;
+    let signature = agent.get(&format!("{RELEASE}latest.json.sig")).call().map_err(|_| unreachable())?.into_string().map_err(|e| e.to_string())?;
+    if !signed_by_release_key(text.as_bytes(), &signature) {
+        return Err(tr("La última versión publicada no está firmada por Killio; se ignora.", "The latest published version is not signed by Killio; it is ignored.").into());
+    }
     serde_json::from_str(&text).map_err(|_| tr("La información de la última versión no es válida.", "The latest version's information is not valid.").to_string())
 }
 
@@ -161,7 +183,17 @@ pub async fn update_install(app: AppHandle, window: Webview, store: State<'_, St
 
 #[cfg(test)]
 mod tests {
-    use super::{asset, is_newer, Manifest};
+    use super::{asset, is_newer, signed_by_release_key, Manifest};
+
+    #[test]
+    fn only_the_release_key_signs_a_manifest() {
+        let signature = "x0QZ+FfcIi8NnXWhroRBEgjeKqi3ZZ78ZMxkPKs3I9S8kXtnjSjw1mmb2N83m/g/0EGcSq7dDVuHMs/oW63sAw==";
+        assert!(signed_by_release_key(b"killio-test", signature));
+        assert!(!signed_by_release_key(b"killio-tesT", signature), "another message");
+        assert!(!signed_by_release_key(b"killio-test", &signature.replace("x0QZ", "x0QA")), "another signature");
+        assert!(!signed_by_release_key(b"killio-test", ""));
+        assert!(!signed_by_release_key(b"killio-test", "not base64 !!"));
+    }
 
     #[test]
     fn only_a_higher_build_number_is_an_update() {

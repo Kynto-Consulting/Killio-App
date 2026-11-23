@@ -2,7 +2,7 @@
 // exists, what changed since the build before it, and the SHA-256 of each installer.
 //   node .github/release-manifest.mjs <release dir> [previous latest.json]
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createPrivateKey, sign } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -28,19 +28,23 @@ const notes = (since ?? log(["-10"]) ?? []).filter((line) => !/^(ci|chore|test)(
 
 const sha256 = {};
 for (const name of readdirSync(dir)) {
-  if (name === "latest.json" || name === "notes.md") continue;
+  if (name === "latest.json" || name === "latest.json.sig" || name === "notes.md") continue;
   sha256[name] = createHash("sha256").update(readFileSync(join(dir, name))).digest("hex");
 }
 
 const manifest = { build, commit, date: new Date().toISOString(), notes, sha256 };
-writeFileSync(join(dir, "latest.json"), JSON.stringify(manifest, null, 2));
+const text = JSON.stringify(manifest, null, 2);
+writeFileSync(join(dir, "latest.json"), text);
+// The app ignores a manifest that is not signed with the release key (update.rs), so publishing without it is refused.
+if (!process.env.RELEASE_SIGNING_KEY) throw new Error("RELEASE_SIGNING_KEY is not set: the release would be ignored by every installed app");
+writeFileSync(join(dir, "latest.json.sig"), sign(null, Buffer.from(text), createPrivateKey(process.env.RELEASE_SIGNING_KEY)).toString("base64"));
 writeFileSync(
   join(dir, "notes.md"),
   [
     `Killio App build ${build}, from ${commit.slice(0, 7)}.`,
     "",
     ...(notes.length ? ["What changed:", "", ...notes.map((n) => `- ${n}`), ""] : []),
-    "Windows and macOS builds are not code-signed; the Android build is an unsigned preview.",
+    "Windows and macOS builds are not code-signed; the Android build is a preview.",
   ].join("\n"),
 );
 console.log(JSON.stringify(manifest, null, 2));

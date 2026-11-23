@@ -50,8 +50,35 @@
   var lastChrome = "";
   function reportChrome() {
     if (!document.body) return;
-    var color = getComputedStyle(document.body).backgroundColor;
-    if (!color || /rgba\(0, 0, 0, 0\)|transparent/.test(color)) color = getComputedStyle(document.documentElement).backgroundColor;
+    // The colour actually painted at the top of the page: many pages leave body transparent and paint a
+    // container instead. Walk up from what is drawn there to the first solid background.
+    var solid = function (c) {
+      if (!c || c === "transparent") return false;
+      var alpha = /^rgba\(.*,\s*([\d.]+)\s*\)$/.exec(c);
+      return !alpha || parseFloat(alpha[1]) >= 0.95;
+    };
+    var color = null;
+    var at = document.elementFromPoint(Math.floor(window.innerWidth / 2), 2) || document.body;
+    for (var el = at; el && el.nodeType === 1; el = el.parentElement) {
+      var painted = getComputedStyle(el).backgroundColor;
+      if (solid(painted)) { color = painted; break; }
+    }
+    // Nothing solid anywhere: what shows is the webview's own canvas, white or dark by colour scheme.
+    if (!color) color = window.matchMedia("(prefers-color-scheme: dark)").matches && /dark/.test(getComputedStyle(document.documentElement).colorScheme || "") ? "rgb(18, 18, 18)" : "rgb(255, 255, 255)";
+    // Pages may use colour formats the bar does not read (oklch, lab, color()): paint one pixel and read it
+    // back as plain rgb.
+    if (!/^rgb\(/.test(color)) {
+      try {
+        var canvas = reportChrome.canvas || (reportChrome.canvas = document.createElement("canvas"));
+        canvas.width = canvas.height = 1;
+        var pen = canvas.getContext("2d", { willReadFrequently: true });
+        pen.clearRect(0, 0, 1, 1);
+        pen.fillStyle = color;
+        pen.fillRect(0, 0, 1, 1);
+        var px = pen.getImageData(0, 0, 1, 1).data;
+        color = "rgb(" + px[0] + ", " + px[1] + ", " + px[2] + ")";
+      } catch (e) { /* the bar keeps the colour it had */ }
+    }
     var link = document.querySelector('link[rel~="icon"], link[rel="apple-touch-icon"]');
     // Active listening: the page says whether it offers it and whether the microphone is on, so the title
     // bar can show a microphone button that is impossible to miss while it records.

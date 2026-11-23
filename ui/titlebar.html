@@ -29,7 +29,6 @@
   .lights:hover .light svg, .light:focus-visible svg { opacity: 1; }
   .light:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
   .close { background: #ff5f57; } .min { background: #febc2e; } .max { background: #28c840; }
-  body.blurred .light { background: color-mix(in srgb, var(--fg) 22%, transparent); }
 
   .ghost {
     height: 24px; border: 0; background: none; color: inherit; font: inherit; border-radius: 7px;
@@ -107,15 +106,18 @@
     if (event.detail === 2) act("maximize"); else act("drag");
   });
   document.addEventListener("contextmenu", function (event) { event.preventDefault(); });
-  window.addEventListener("blur", function () { document.body.classList.add("blurred"); });
-  window.addEventListener("focus", function () { document.body.classList.remove("blurred"); });
+  // The buttons keep their colours whether or not this bar has the focus: the bar is its own webview, so
+  // it loses the focus every time the person clicks in the page, which is nearly always.
 
   // The page below tells the app its colour, name and icon; the bar takes them so both read as one surface.
   window.__setChrome = function (chrome) {
     if (chrome.color) {
       var m = /(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(chrome.color);
-      document.body.style.setProperty("--bg", chrome.color);
+      var hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(chrome.color);
+      if (hex) m = [0, parseInt(hex[1], 16), parseInt(hex[2], 16), parseInt(hex[3], 16)];
+      // A colour whose brightness cannot be read is not taken: text must never end up the bar's own colour.
       if (m) {
+        document.body.style.setProperty("--bg", chrome.color);
         var dark = (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) < 140;
         document.body.classList.toggle("light", !dark);
         document.body.style.setProperty("--fg", dark ? "#f1f1ec" : "#1b1b19");

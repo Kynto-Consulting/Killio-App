@@ -4,6 +4,14 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+    # Every change to the app on main is built, tried on each system and published as app-latest.
+    branches: [main]
+    paths: ["src-tauri/**", "ui/**", "package.json", "package-lock.json", ".github/**"]
+
+# A newer push replaces a build still in progress: only the newest one should publish.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 # The build number the app carries and compares with the published one (update.rs).
 env:
@@ -111,12 +119,29 @@ jobs:
               sed -i "0,/<application/s//<uses-permission android:name=\"android.permission.$permission\" \/>\n    <application/" "$manifest"
           done
           grep -n "uses-permission" "$manifest"
-      # Unsigned debug APK. A release APK needs a signing key configured as repository secrets.
-      - run: npx tauri android build --debug --apk
+      - run: npx tauri android build --apk
+      # Always the same key, so each APK installs over the one before. The key is a repository secret.
+      - name: Sign the APK with the app's own key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -exec ls -la {} +
+          built="$(find src-tauri/gen/android/app/build/outputs/apk -name '*universal*.apk' | head -1)"
+          [ -n "$built" ] || built="$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -1)"
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/killio.p12"
+          mkdir signed
+          "$tools/zipalign" -f -p 4 "$built" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" sign --ks "$RUNNER_TEMP/killio.p12" --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD \
+            --ks-key-alias killio --out signed/Killio-android.apk "$RUNNER_TEMP/aligned.apk"
+          rm -f "$RUNNER_TEMP/killio.p12" "$RUNNER_TEMP/aligned.apk" signed/*.idsig
+          "$tools/apksigner" verify --print-certs signed/Killio-android.apk | head -3
+          ls -la signed
       - uses: actions/upload-artifact@v4
         with:
           name: killio-android
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: signed/*.apk
 
   # ── Does it actually run? Install the APK on an Android emulator, open it, keep a picture of the screen.
   # Its own job on a clean machine: building four architectures leaves no disk space for an emulator.
@@ -194,6 +219,8 @@ jobs:
           ls -la release
           test -n "$(ls release)"
       - name: Publish as app-latest
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           # What the app reads to offer an update: build number, changes since the last one, checksums.
