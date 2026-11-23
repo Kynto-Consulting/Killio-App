@@ -49,6 +49,29 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.deb
             src-tauri/target/**/release/bundle/**/*.rpm
 
+      # ── Does it actually run? Start what was built, check it stays up, keep a picture of the screen. ──
+      - name: Run it (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/smoke/windows.ps1
+      - name: Run it (macOS)
+        if: runner.os == 'macOS'
+        run: bash .github/smoke/desktop.sh macos
+      - name: Run it (Linux)
+        if: runner.os == 'Linux'
+        env:
+          # No GPU on the runner: have WebKit draw in software.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+        run: |
+          sudo apt-get install -y xvfb imagemagick
+          xvfb-run -a -s "-screen 0 1280x800x24" bash .github/smoke/desktop.sh linux
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.os }}
+          path: smoke/
+
   android:
     runs-on: ubuntu-24.04
     steps:
@@ -87,6 +110,29 @@ jobs:
         with:
           name: killio-android
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+      # ── Does it actually run? Install it on an Android emulator, open it, keep a picture of the screen. ──
+      - name: Let the emulator use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run it (Android emulator)
+        # A slow emulator must not hold back the installers: the result is read from the log and the picture.
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash .github/smoke/android.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-android
+          path: smoke/
 
   # The installers people download. `app-latest` is a rolling release: it always holds the newest build
   # of main, and the download page of the frontend links to its files (through the frontend's own route,
