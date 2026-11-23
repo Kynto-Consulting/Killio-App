@@ -72,6 +72,15 @@ jobs:
       - run: npm ci
       # The Android project is generated, not committed, until it needs hand edits.
       - run: npx tauri android init
+      # Microphone and camera (active listening, calls): the generated manifest only asks for the internet.
+      - name: Add device permissions to the generated manifest
+        run: |
+          manifest=src-tauri/gen/android/app/src/main/AndroidManifest.xml
+          for permission in RECORD_AUDIO MODIFY_AUDIO_SETTINGS CAMERA; do
+            grep -q "android.permission.$permission" "$manifest" ||
+              sed -i "0,/<application/s//<uses-permission android:name=\"android.permission.$permission\" \/>\n    <application/" "$manifest"
+          done
+          grep -n "uses-permission" "$manifest"
       # Unsigned debug APK. A release APK needs a signing key configured as repository secrets.
       - run: npx tauri android build --debug --apk
       - uses: actions/upload-artifact@v4

@@ -53,9 +53,12 @@
     var color = getComputedStyle(document.body).backgroundColor;
     if (!color || /rgba\(0, 0, 0, 0\)|transparent/.test(color)) color = getComputedStyle(document.documentElement).backgroundColor;
     var link = document.querySelector('link[rel~="icon"], link[rel="apple-touch-icon"]');
+    // Active listening: the page says whether it offers it and whether the microphone is on, so the title
+    // bar can show a microphone button that is impossible to miss while it records.
+    var listening = typeof window.__killioListeningState === "boolean" ? window.__killioListeningState : null;
     var chrome = isLauncher
-      ? { color: color, name: "Killio", icon: null }
-      : { color: color, name: (document.title || "").split(/\s[|·—-]\s/)[0].trim() || location.hostname, icon: link ? link.href : location.origin + "/favicon.ico" };
+      ? { color: color, name: "Killio", icon: null, listening: null }
+      : { color: color, name: (document.title || "").split(/\s[|·—-]\s/)[0].trim() || location.hostname, icon: link ? link.href : location.origin + "/favicon.ico", listening: listening };
     var key = JSON.stringify(chrome);
     if (key === lastChrome) return;
     lastChrome = key;
@@ -63,7 +66,7 @@
   }
   document.addEventListener("DOMContentLoaded", reportChrome);
   window.addEventListener("load", reportChrome);
-  setInterval(reportChrome, 2000); // theme switches and title changes after load
+  setInterval(reportChrome, 1000); // theme switches, title changes and the microphone state after load
 
   window.addEventListener("keydown", function (event) {
     if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey) return;

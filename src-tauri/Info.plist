@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- macOS shows this text when Killio asks for the microphone (active listening, calls). Without the
+       key the system refuses the microphone without asking. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Killio uses the microphone for calls and for active listening, only while you turn them on.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Killio uses the camera for video calls, only while you are in one.</string>
+</dict>
+</plist>

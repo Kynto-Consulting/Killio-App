@@ -40,6 +40,14 @@
   .ghost span { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ghost svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: .75; }
   .drag { flex: 1; align-self: stretch; }
+  [hidden] { display: none !important; }
+  .mic { position: relative; }
+  .mic .dot { display: none; width: 7px; height: 7px; border-radius: 50%; background: #ff453a; padding: 0; }
+  .mic.on { color: #ff453a; background: color-mix(in srgb, #ff453a 14%, transparent); }
+  .mic.on svg { opacity: 1; }
+  .mic.on .dot { display: block; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .mic.on .dot { animation: none; } }
 </style>
 </head>
 <body>
@@ -57,14 +65,16 @@
 
   <div class="drag" id="drag"></div>
 
+  <!-- Active listening. Hidden until the page says it offers it; red and pulsing while the microphone is on. -->
+  <button class="ghost mic" id="mic" data-action="listen" data-i18n-label="listenOff" hidden><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><span class="dot"></span></button>
   <button class="ghost" data-action="back" data-i18n-label="back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
   <button class="ghost" data-action="servers" data-i18n-label="servers"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="6.5" rx="2"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="2"/><path d="M7.5 7.25h.01M7.5 16.75h.01"/></svg></button>
 
 <script>
 (function () {
   var STRINGS = {
-    es: { close: "Cerrar", minimize: "Minimizar", maximize: "Maximizar", home: "Ir al inicio de {name}", back: "Atrás", servers: "Cambiar de servidor" },
-    en: { close: "Close", minimize: "Minimize", maximize: "Maximize", home: "Go to {name}'s start page", back: "Back", servers: "Switch server" }
+    es: { close: "Cerrar", minimize: "Minimizar", maximize: "Maximizar", home: "Ir al inicio de {name}", back: "Atrás", servers: "Cambiar de servidor", listenOff: "Activar la escucha activa", listenOn: "Escuchando: detener" },
+    en: { close: "Close", minimize: "Minimize", maximize: "Maximize", home: "Go to {name}'s start page", back: "Back", servers: "Switch server", listenOff: "Turn active listening on", listenOn: "Listening: stop" }
   };
   var lang = /^es(-|_|$)/i.test(window.__KILLIO_LANG__ || navigator.language || "") ? "es" : "en";
   var name = "Killio";
@@ -107,7 +117,14 @@
         document.body.style.setProperty("--hover", dark ? "rgba(255,255,255,.09)" : "rgba(0,0,0,.07)");
       }
     }
-    if (chrome.name) { name = chrome.name; document.getElementById("name").textContent = name; label(); }
+    var mic = document.getElementById("mic");
+    var offered = typeof chrome.listening === "boolean";
+    mic.hidden = !offered;
+    mic.classList.toggle("on", chrome.listening === true);
+    mic.setAttribute("data-i18n-label", chrome.listening === true ? "listenOn" : "listenOff");
+    mic.setAttribute("aria-pressed", chrome.listening === true ? "true" : "false");
+    if (chrome.name) { name = chrome.name; document.getElementById("name").textContent = name; }
+    label();
     var logo = document.getElementById("logo");
     var wanted = chrome.icon || "icon.png";
     if (logo.getAttribute("src") !== wanted) {

@@ -406,6 +406,9 @@ pub struct Chrome {
     name: Option<String>,
     /// Address of the server's icon.
     icon: Option<String>,
+    /// Active listening: `Some(true)` microphone on, `Some(false)` offered but off, `None` not offered.
+    #[serde(default)]
+    listening: Option<bool>,
 }
 
 fn clean_color(value: &str) -> Option<String> {
@@ -431,6 +434,7 @@ pub fn set_chrome(app: AppHandle, window: Webview, store: State<Store>, chrome: 
         color: chrome.color.as_deref().and_then(clean_color),
         name: chrome.name.map(|n| n.trim().chars().filter(|c| !c.is_control()).take(60).collect::<String>()).filter(|n| !n.is_empty()),
         icon: chrome.icon.as_deref().and_then(clean_icon),
+        listening: chrome.listening,
     };
     #[cfg(desktop)]
     {
@@ -462,6 +466,8 @@ pub fn chrome_action(app: AppHandle, window: Webview, store: State<Store>, actio
             "close" => frame.close(),
             "drag" => frame.start_dragging(),
             "back" => content.eval("history.back()"),
+            // The page owns active listening (consent, capture, the card it shows); the bar only asks.
+            "listen" => content.eval("window.__killioListening && window.__killioListening.toggle()"),
             "servers" => return go_to_launcher(&content, "switch"),
             // The way out of anything the window got into: the server's own start page (sign-in or workspace).
             "home" => {
