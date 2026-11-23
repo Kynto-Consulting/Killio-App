@@ -15,7 +15,7 @@ use tauri::{
 
 use crate::i18n::tr;
 
-const TRAY: &str = "killio";
+pub const TRAY: &str = "killio";
 
 /// Whether the page reports the microphone on (see `commands::set_chrome`).
 #[derive(Default)]
