@@ -88,6 +88,8 @@
     // Apps installed on this computer (desktop).
     listApps: function () { return invoke("list_apps"); },
     openApp: function (pkg) { return invoke("open_app", { package: pkg }); },
+    // The phone's own hardware and system apps (Android): setAlarm, setTimer, flashlight, listApps, openApp.
+    device: function (action, payload) { return invoke("device_action", { action: action, payload: payload || {} }); },
     openAccount: function (tenant, accountId) { return invoke("open_account", { tenant: tenant, accountId: accountId }); },
     // The person's own Claude Code as AI provider (desktop). The page sends Anthropic Messages requests
     // through the app and reads the stream by polling; it never sees the bridge's address or key.

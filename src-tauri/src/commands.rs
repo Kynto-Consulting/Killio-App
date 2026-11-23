@@ -58,6 +58,9 @@ pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<
         features.push("apps");
         features.push("claude");
     }
+    if cfg!(target_os = "android") {
+        features.push("deviceTools");
+    }
     Ok(AppInfo {
         version: app.package_info().version.to_string(),
         platform: std::env::consts::OS,
@@ -394,6 +397,27 @@ pub fn save_screenshot(app: AppHandle, window: Webview, store: State<Store>) -> 
     #[cfg(not(desktop))]
     let _ = app;
     Ok(())
+}
+
+/// The phone's own hardware and system apps (Android): what Killio Vault's alarm, timer, torch and
+/// installed-app tools did. Only the actions named here exist; the Kotlin side does the work.
+#[tauri::command]
+pub async fn device_action(
+    app: AppHandle,
+    window: Webview,
+    store: State<'_, Store>,
+    action: String,
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    require_trusted(&window, &store)?;
+    if !matches!(action.as_str(), "setAlarm" | "setTimer" | "flashlight" | "listApps" | "openApp") {
+        return Err(tr("Esa acción no existe.", "That action does not exist.").into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<tauri_plugin_killio_device::Device<tauri::Wry>>().run(&action, payload)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ── The app's own title bar (desktop) ───────────────────────────────────────

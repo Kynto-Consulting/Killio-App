@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs inside an Android emulator session: installs the APK that was just built, opens the app, checks it
-# is still alive after a while and takes a picture of the screen.
+# is still alive after a while and takes a picture of the screen; then picks killio.dev in the server
+# picker, to see the app load and draw a real server's page on a phone.
 set -u
 mkdir -p smoke
 package="dev.killio.client"
@@ -15,6 +16,18 @@ sleep 40
 
 pid="$(adb shell pidof "$package" | tr -d '\r')"
 adb exec-out screencap -p > smoke/android.png
+
+if [ -n "$pid" ]; then
+  # The "Killio" row of the picker sits a little above the middle of the screen.
+  size="$(adb shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+' | tail -1)"
+  width="${size%x*}"; height="${size#*x}"
+  echo "screen: ${width}x${height}; tapping the Killio row"
+  adb shell input tap "$((width / 2))" "$((height * 43 / 100))"
+  sleep 45
+  adb exec-out screencap -p > smoke/android-server.png
+  echo "--- after choosing the server, still running: $(adb shell pidof "$package" | tr -d '\r')"
+fi
+
 adb logcat -d > smoke/android.log 2>&1
 ls -la smoke
 echo "--- crashes in the log, if any:"

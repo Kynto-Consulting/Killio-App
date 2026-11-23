@@ -32,6 +32,7 @@
     "allow-claude-models",
     "allow-claude-send",
     "allow-claude-poll",
-    "allow-claude-cancel"
+    "allow-claude-cancel",
+    "allow-device-action"
   ]
 }

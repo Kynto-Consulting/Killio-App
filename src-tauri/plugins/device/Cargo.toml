@@ -1,0 +1,13 @@
+[package]
+name = "tauri-plugin-killio-device"
+version = "0.1.0"
+description = "Phone hardware for Killio App's agent tools (alarm, timer, torch, installed apps). Android."
+edition = "2021"
+links = "tauri-plugin-killio-device"
+
+[dependencies]
+tauri = { version = "2" }
+serde_json = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

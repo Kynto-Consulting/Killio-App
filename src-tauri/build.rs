@@ -26,6 +26,7 @@ fn main() {
             "claude_send",
             "claude_poll",
             "claude_cancel",
+            "device_action",
         ]),
     ))
     .expect("failed to run tauri-build");
