@@ -23,7 +23,7 @@ pub fn run() {
     // passes its link to the running one and exits.
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        if let Some(window) = app.get_window("main") {
+        if let Some(window) = main_window(app) {
             let _ = window.unminimize();
             let _ = window.set_focus();
         }
@@ -64,8 +64,10 @@ pub fn run() {
             // The system language goes first so the launcher and the native messages agree.
             let init = format!("window.__KILLIO_LANG__={:?};{}", i18n::language(), INIT_SCRIPT);
 
-            #[cfg(desktop)]
+            #[cfg(all(desktop, not(target_os = "linux")))]
             desktop::build(app, &init)?;
+            #[cfg(target_os = "linux")]
+            linux::build(app, &init)?;
 
             // A phone has no window chrome to replace: one full-screen webview.
             #[cfg(mobile)]
@@ -88,7 +90,7 @@ pub fn run() {
                             let _ = content.navigate(target);
                         }
                         #[cfg(desktop)]
-                        if let Some(window) = handle.get_window("main") {
+                        if let Some(window) = main_window(&handle) {
                             let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
@@ -107,10 +109,70 @@ pub fn run() {
         });
 }
 
-/// The desktop window: no system frame and no menu bar. A slim title bar of the app's own sits on top
+/// The app's window, whichever way this system builds it (see `desktop` and `linux`).
+#[cfg(desktop)]
+pub fn main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
+    app.get_window("main").or_else(|| app.get_window(CONTENT))
+}
+
+/// Linux: one webview in a window with the system's own frame, and the app's controls in a menu.
+/// The two-webview window used on Windows and macOS does not come up under GTK (no window is ever
+/// shown; found by running the build in CI), so Linux keeps the plain arrangement that does.
+#[cfg(target_os = "linux")]
+mod linux {
+    use tauri::{
+        menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
+        App, WebviewWindowBuilder,
+    };
+
+    use super::{WebviewUrl, CONTENT};
+    use crate::i18n::tr;
+
+    pub fn build(app: &mut App, init: &str) -> tauri::Result<()> {
+        let window = WebviewWindowBuilder::new(app, CONTENT, WebviewUrl::App("index.html".into()))
+            .initialization_script(init)
+            .title("Killio")
+            .inner_size(1280.0, 800.0)
+            .min_inner_size(380.0, 560.0)
+            .build()?;
+
+        let handle = app.handle();
+        // The ids are the same actions the title bar's buttons send on the other systems.
+        let item = |id: &str, label: &str, key: Option<&str>| {
+            let builder = MenuItemBuilder::with_id(id, label);
+            match key {
+                Some(key) => builder.accelerator(key).build(handle),
+                None => builder.build(handle),
+            }
+        };
+        let killio = SubmenuBuilder::new(handle, "Killio")
+            .item(&item("home", tr("Ir al inicio", "Go to the start page"), Some("Alt+Home"))?)
+            .item(&item("back", tr("Atrás", "Back"), Some("Alt+Left"))?)
+            .item(&item("reload", tr("Recargar", "Reload"), Some("CmdOrCtrl+R"))?)
+            .separator()
+            .item(&item("servers", tr("Cambiar de servidor…", "Switch server…"), Some("CmdOrCtrl+Shift+T"))?)
+            .separator()
+            .item(&item("listen", tr("Escucha activa", "Active listening"), None)?)
+            .item(&item("screenshot", tr("Guardar captura de pantalla", "Save screenshot"), Some("CmdOrCtrl+Shift+S"))?)
+            .separator()
+            .quit()
+            .build()?;
+        let edit = SubmenuBuilder::new(handle, tr("Editar", "Edit")).undo().redo().separator().cut().copy().paste().select_all().build()?;
+        window.set_menu(MenuBuilder::new(handle).item(&killio).item(&edit).build()?)?;
+
+        app.on_menu_event(|app, event| {
+            if let Some(frame) = super::main_window(app) {
+                let _ = crate::commands::run_chrome_action(app, &frame, event.id().as_ref());
+            }
+        });
+        Ok(())
+    }
+}
+
+/// Windows and macOS: no system frame and no menu bar. A slim title bar of the app's own sits on top
 /// and the page gets everything below it, as two separate webviews. The page therefore keeps its real
 /// viewport and never has to make room for the app's chrome, whatever frontend version it is.
-#[cfg(desktop)]
+#[cfg(all(desktop, not(target_os = "linux")))]
 mod desktop {
     use tauri::{webview::WebviewBuilder, window::WindowBuilder, App, LogicalPosition, LogicalSize, Window, WindowEvent};
 

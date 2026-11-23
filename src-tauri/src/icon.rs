@@ -3,7 +3,7 @@
 
 use std::{io::Read, sync::Mutex, time::Duration};
 
-use tauri::{image::Image, AppHandle, Manager};
+use tauri::{image::Image, AppHandle};
 
 /// Address of the icon the window shows now (`None`: the app's own).
 static CURRENT: Mutex<Option<String>> = Mutex::new(None);
@@ -30,7 +30,7 @@ pub fn decode(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
 
 fn apply(app: &AppHandle, icon: Option<Image<'static>>) {
     let Some(icon) = icon.or_else(|| app.default_window_icon().map(|i| i.clone().to_owned())) else { return };
-    if let Some(window) = app.get_window("main") {
+    if let Some(window) = crate::main_window(app) {
         let _ = window.set_icon(icon);
     }
 }

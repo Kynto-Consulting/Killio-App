@@ -456,36 +456,49 @@ pub fn chrome_action(app: AppHandle, window: Webview, store: State<Store>, actio
     if !own {
         return Err(tr("Solo disponible desde la barra de la app.", "Only available from the app's title bar.").into());
     }
+    let _ = store;
     #[cfg(desktop)]
     {
-        let frame = window.window();
-        let content = app.get_webview(crate::CONTENT).ok_or("content")?;
-        let done = match action.as_str() {
-            "minimize" => frame.minimize(),
-            "maximize" => if frame.is_maximized().unwrap_or(false) { frame.unmaximize() } else { frame.maximize() },
-            "close" => frame.close(),
-            "drag" => frame.start_dragging(),
-            "back" => content.eval("history.back()"),
-            // The page owns active listening (consent, capture, the card it shows); the bar only asks.
-            "listen" => content.eval("window.__killioListening && window.__killioListening.toggle()"),
-            "servers" => return go_to_launcher(&content, "switch"),
-            // The way out of anything the window got into: the server's own start page (sign-in or workspace).
-            "home" => {
-                let current = store.config.lock().unwrap().current.clone();
-                return match current.and_then(|c| Url::parse(&c).ok()) {
-                    Some(tenant) => content.navigate(tenant).map_err(|e| e.to_string()),
-                    None => go_to_launcher(&content, "switch"),
-                };
-            }
-            _ => return Err("unknown action".into()),
-        };
-        done.map_err(|e| e.to_string())
+        run_chrome_action(&app, &window.window(), &action)
     }
     #[cfg(not(desktop))]
     {
-        let _ = (app, store, action);
+        let _ = (app, action);
         Ok(())
     }
+}
+
+/// What the app's own controls do, whoever shows them: the title bar's buttons on Windows and macOS, the
+/// menu on Linux. `frame` is the window they belong to.
+#[cfg(desktop)]
+pub fn run_chrome_action(app: &AppHandle, frame: &tauri::Window, action: &str) -> Result<(), String> {
+    let content = app.get_webview(crate::CONTENT).ok_or("content")?;
+    let done = match action {
+        "minimize" => frame.minimize(),
+        "maximize" => if frame.is_maximized().unwrap_or(false) { frame.unmaximize() } else { frame.maximize() },
+        "close" => frame.close(),
+        "drag" => frame.start_dragging(),
+        "back" => content.eval("history.back()"),
+        "reload" => content.eval("location.reload()"),
+        // The page owns active listening (consent, capture, the card it shows); the app only asks.
+        "listen" => content.eval("window.__killioListening && window.__killioListening.toggle()"),
+        "screenshot" => {
+            let app = app.clone();
+            std::thread::spawn(move || save_screenshot_to_pictures(&app));
+            Ok(())
+        }
+        "servers" => return go_to_launcher(&content, "switch"),
+        // The way out of anything the window got into: the server's own start page (sign-in or workspace).
+        "home" => {
+            let current = app.state::<Store>().config.lock().unwrap().current.clone();
+            return match current.and_then(|c| Url::parse(&c).ok()) {
+                Some(tenant) => content.navigate(tenant).map_err(|e| e.to_string()),
+                None => go_to_launcher(&content, "switch"),
+            };
+        }
+        _ => return Err("unknown action".into()),
+    };
+    done.map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
