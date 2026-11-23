@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Setting an alarm or a timer through the phone's clock app. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- Asked for only when the assistant first needs them, and only after the person agreed in the app. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <!-- Seeing which apps have a launcher icon (Android 11+ hides other apps unless asked like this). -->
     <queries>

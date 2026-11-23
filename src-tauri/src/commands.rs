@@ -63,6 +63,8 @@ pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<
     }
     if cfg!(target_os = "android") {
         features.push("deviceTools");
+        // Contacts, calendar, brightness and media keys (newer than "deviceTools").
+        features.push("phoneData");
     }
     Ok(AppInfo {
         version: app.package_info().version.to_string(),
@@ -432,7 +434,10 @@ pub async fn device_action(
     payload: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     require_trusted(&window, &store)?;
-    if !matches!(action.as_str(), "setAlarm" | "setTimer" | "flashlight" | "listApps" | "openApp") {
+    if !matches!(
+        action.as_str(),
+        "setAlarm" | "setTimer" | "flashlight" | "listApps" | "openApp" | "calendarCreate" | "calendarList" | "contactsSearch" | "setBrightness" | "mediaKey"
+    ) {
         return Err(tr("Esa acción no existe.", "That action does not exist.").into());
     }
     tauri::async_runtime::spawn_blocking(move || {
