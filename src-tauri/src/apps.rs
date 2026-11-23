@@ -1,3 +1,5 @@
+// The module compiles everywhere so the commands keep one signature; only desktops call into it.
+#![cfg_attr(not(desktop), allow(dead_code))]
 //! Installed applications on a desktop: what the agent's `list_installed_apps`, `search_app` and
 //! `open_installed_app` tools work with. Each system keeps its launchable apps in a different place:
 //!   Windows  Start Menu shortcuts (.lnk), for all users and for this user

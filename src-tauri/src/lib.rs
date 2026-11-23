@@ -1,4 +1,3 @@
-#[cfg(desktop)]
 mod apps;
 mod commands;
 mod config;
