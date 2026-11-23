@@ -33,7 +33,13 @@ else
 fi
 
 case "$system" in
-  linux) import -window root "smoke/$system.png" 2>> "$log" || echo "no screenshot" ;;
+  linux)
+    # A black picture can mean "nothing drawn" or "no window": list the windows to tell them apart.
+    echo "--- windows on the display:"
+    xwininfo -root -tree 2>/dev/null | grep -E '^\s+0x' | head -20
+    import -window root "smoke/$system.png" 2>> "$log" || echo "no screenshot"
+    echo "--- distinct colours in the picture: $(identify -format '%k' "smoke/$system.png" 2>/dev/null)"
+    ;;
   macos) screencapture -x "smoke/$system.png" 2>> "$log" || echo "no screenshot" ;;
 esac
 ls -la smoke
