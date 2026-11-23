@@ -4,6 +4,7 @@ mod config;
 mod claude;
 mod deeplink;
 mod i18n;
+mod update;
 #[cfg(desktop)]
 mod icon;
 #[cfg(desktop)]
@@ -63,6 +64,8 @@ pub fn run() {
             claude::claude_cancel,
             commands::device_action,
             commands::notify,
+            update::update_check,
+            update::update_install,
         ])
         .setup(|app| {
             let store = app.state::<config::Store>();

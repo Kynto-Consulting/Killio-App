@@ -44,6 +44,8 @@ pub(crate) fn require_trusted(window: &Webview, store: &Store) -> Result<(), Str
 #[derive(Serialize)]
 pub struct AppInfo {
     version: String,
+    /// Number of the published build; 0 for a build made outside CI.
+    build: u64,
     platform: &'static str,
     features: Vec<&'static str>,
     tenant: Option<String>,
@@ -52,7 +54,7 @@ pub struct AppInfo {
 #[tauri::command]
 pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<AppInfo, String> {
     require_trusted(&window, &store)?;
-    let mut features = vec!["switchTenant", "openExternal", "accounts", "notifications"];
+    let mut features = vec!["switchTenant", "openExternal", "accounts", "notifications", "update"];
     if cfg!(desktop) {
         features.push("screenshot");
         features.push("apps");
@@ -64,6 +66,7 @@ pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<
     }
     Ok(AppInfo {
         version: app.package_info().version.to_string(),
+        build: crate::update::current_build(),
         platform: std::env::consts::OS,
         features,
         tenant: store.config.lock().unwrap().current.clone(),

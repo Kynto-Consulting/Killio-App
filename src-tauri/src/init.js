@@ -90,6 +90,9 @@
     openApp: function (pkg) { return invoke("open_app", { package: pkg }); },
     // A system notification, for what the server routes through the app instead of the browser's web push.
     notify: function (notification) { return invoke("notify", { title: notification.title, body: notification.body || null }); },
+    // Updating the app itself: is there a newer published build, what changed, and install it.
+    checkUpdate: function () { return invoke("update_check"); },
+    installUpdate: function () { return invoke("update_install"); },
     // The phone's own hardware and system apps (Android): setAlarm, setTimer, flashlight, listApps, openApp.
     device: function (action, payload) { return invoke("device_action", { action: action, payload: payload || {} }); },
     openAccount: function (tenant, accountId) { return invoke("open_account", { tenant: tenant, accountId: accountId }); },

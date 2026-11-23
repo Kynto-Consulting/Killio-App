@@ -34,6 +34,8 @@
     "allow-claude-poll",
     "allow-claude-cancel",
     "allow-device-action",
-    "allow-notify"
+    "allow-notify",
+    "allow-update-check",
+    "allow-update-install"
   ]
 }

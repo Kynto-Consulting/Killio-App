@@ -5,6 +5,10 @@ on:
   push:
     tags: ["v*"]
 
+# The build number the app carries and compares with the published one (update.rs).
+env:
+  KILLIO_BUILD: ${{ github.run_number }}
+
 jobs:
   desktop:
     strategy:
@@ -165,6 +169,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history: the release notes list what changed since the last published build.
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -189,12 +196,15 @@ jobs:
       - name: Publish as app-latest
         run: |
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          notes="Killio App $version, built from ${GITHUB_SHA::7}. Windows and macOS builds are not code-signed; the Android build is an unsigned preview."
+          # What the app reads to offer an update: build number, changes since the last one, checksums.
+          gh release download app-latest -p latest.json -O previous.json 2> /dev/null || true
+          node .github/release-manifest.mjs release previous.json
+          mv release/notes.md notes.md
           git tag -f app-latest "$GITHUB_SHA"
           git push -f origin app-latest
           if gh release view app-latest > /dev/null 2>&1; then
-            gh release edit app-latest --title "Killio App $version" --notes "$notes" --prerelease=false
+            gh release edit app-latest --title "Killio App $version (build $GITHUB_RUN_NUMBER)" --notes-file notes.md --prerelease=false
           else
-            gh release create app-latest --title "Killio App $version" --notes "$notes"
+            gh release create app-latest --title "Killio App $version (build $GITHUB_RUN_NUMBER)" --notes-file notes.md
           fi
           gh release upload app-latest release/* --clobber

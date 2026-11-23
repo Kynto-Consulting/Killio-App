@@ -26,6 +26,10 @@ tauri-plugin-deep-link = "2"
 getrandom = "0.2"
 tauri-plugin-notification = "2"
 
+# Windows checks the installer it downloads before starting it (update.rs).
+[target.'cfg(windows)'.dependencies]
+sha2 = "0.10"
+
 [profile.release]
 codegen-units = 1
 lto = true
