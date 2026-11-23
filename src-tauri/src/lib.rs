@@ -32,6 +32,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_killio_device::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(config::Store::default())
         .manage(claude::Bridge::default())
         .invoke_handler(tauri::generate_handler![
@@ -59,6 +60,7 @@ pub fn run() {
             claude::claude_poll,
             claude::claude_cancel,
             commands::device_action,
+            commands::notify,
         ])
         .setup(|app| {
             let store = app.state::<config::Store>();

@@ -52,7 +52,7 @@ pub struct AppInfo {
 #[tauri::command]
 pub fn app_info(app: AppHandle, window: Webview, store: State<Store>) -> Result<AppInfo, String> {
     require_trusted(&window, &store)?;
-    let mut features = vec!["switchTenant", "openExternal", "accounts"];
+    let mut features = vec!["switchTenant", "openExternal", "accounts", "notifications"];
     if cfg!(desktop) {
         features.push("screenshot");
         features.push("apps");
@@ -397,6 +397,24 @@ pub fn save_screenshot(app: AppHandle, window: Webview, store: State<Store>) -> 
     #[cfg(not(desktop))]
     let _ = app;
     Ok(())
+}
+
+/// Shows a system notification. The page calls this for the notifications the server routes through the
+/// app (instead of the browser's web push) while the app is open.
+#[tauri::command]
+pub fn notify(app: AppHandle, window: Webview, store: State<Store>, title: String, body: Option<String>) -> Result<(), String> {
+    require_trusted(&window, &store)?;
+    use tauri_plugin_notification::NotificationExt;
+    let clip = |text: &str, max: usize| text.trim().chars().filter(|c| !c.is_control()).take(max).collect::<String>();
+    let title = clip(&title, 120);
+    if title.is_empty() {
+        return Ok(());
+    }
+    let mut notification = app.notification().builder().title(title);
+    if let Some(body) = body.as_deref().map(|b| clip(b, 400)).filter(|b| !b.is_empty()) {
+        notification = notification.body(body);
+    }
+    notification.show().map_err(|e| e.to_string())
 }
 
 /// The phone's own hardware and system apps (Android): what Killio Vault's alarm, timer, torch and
