@@ -15,6 +15,9 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
+  /* A phone draws the page under its rounded corners and home indicator too: the colour must reach there. */
+  html { background: var(--bg); }
+  body { min-height: 100dvh; }
   body {
     background: var(--bg); color: var(--text);
     font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
