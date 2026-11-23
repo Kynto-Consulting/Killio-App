@@ -7,8 +7,9 @@
 //! The page can ask for a check or an install but chooses nothing: the address is fixed here, so a
 //! server's page can only ever make the app install Killio App's own published build.
 //!
-//! Installing: on Windows the installer is downloaded, checked against the manifest's SHA-256, started,
-//! and the app closes so it can be replaced. On the other systems the installer opens in the system's
+//! Installing: on Windows the installer is downloaded, checked against the manifest's SHA-256 and run
+//! in its update mode (a progress bar, no wizard); the app closes so it can be replaced and the
+//! installer opens it again. On the other systems the installer opens in the system's
 //! browser and the person finishes there (a .dmg to drag, a package to install, an APK to accept).
 //!
 //! Trust: `latest.json` is signed in CI with Killio App's release key (ed25519) and the app carries the
@@ -160,8 +161,10 @@ fn download_and_start(app: &AppHandle) -> Result<(), String> {
         let _ = std::fs::remove_file(&path);
         return Err(tr("La descarga no coincide con la versión publicada; no se instaló nada.", "The download does not match the published version; nothing was installed.").into());
     }
-    // The installer takes over: it needs this program closed to replace it.
-    std::process::Command::new(&path).spawn().map_err(|e| e.to_string())?;
+    // An update, not a reinstall: no wizard, no questions. `/P` shows only a small progress bar that closes
+    // itself, `/UPDATE` installs over the current copy without uninstalling it, and `/R` opens the app
+    // again when it is done. The installer needs this program closed to replace it.
+    std::process::Command::new(&path).args(["/P", "/UPDATE", "/R"]).spawn().map_err(|e| e.to_string())?;
     app.exit(0);
     Ok(())
 }
